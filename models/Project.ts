@@ -26,12 +26,6 @@ const projectSchema = new Schema(
       required: true,
     },
 
-    githubUrl: {
-      type: String,
-      default: "",
-      trim: true,
-    },
-
     demoUrl: {
       type: String,
       default: "",

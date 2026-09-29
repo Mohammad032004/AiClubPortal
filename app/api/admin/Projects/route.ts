@@ -59,7 +59,6 @@ export async function POST(request: Request) {
       title,
       description,
       teamId,
-      githubUrl,
       demoUrl,
       documentationUrl,
       status,
@@ -91,17 +90,29 @@ export async function POST(request: Request) {
       );
     }
 
+    const numericProgress =
+      progress !== undefined ? Number(progress) : 0;
+
+    if (
+      Number.isNaN(numericProgress) ||
+      numericProgress < 0 ||
+      numericProgress > 100
+    ) {
+      return NextResponse.json(
+        { message: "Progress must be between 0 and 100" },
+        { status: 400 }
+      );
+    }
+
     const project = await Project.create({
       title: title.trim(),
       description: description?.trim() || "",
       team: teamId,
       createdBy: session.user.id,
-      githubUrl: githubUrl?.trim() || "",
       demoUrl: demoUrl?.trim() || "",
       documentationUrl: documentationUrl?.trim() || "",
       status: status || "PLANNING",
-      progress:
-        progress !== undefined ? Number(progress) : 0,
+      progress: numericProgress,
     });
 
     const populatedProject = await Project.findById(project._id)
