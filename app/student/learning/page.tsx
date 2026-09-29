@@ -10,7 +10,6 @@ import {
   Clock3,
   FileText,
   Circle,
-  Loader2,
 } from "lucide-react";
 
 type ProgressStatus =
@@ -75,7 +74,6 @@ export default function StudentLearningPage() {
 
       setResources(learningResources);
 
-      // Load individual progress for every resource.
       const progressEntries = await Promise.all(
         learningResources.map(async (resource: LearningResource) => {
           try {
@@ -139,7 +137,6 @@ export default function StudentLearningPage() {
     status: ProgressStatus
   ) {
     try {
-      // Optimistic UI update.
       setProgress((current) => ({
         ...current,
         [learningId]: {
@@ -180,7 +177,6 @@ export default function StudentLearningPage() {
     } catch (error) {
       console.error("Progress update error:", error);
 
-      // Reload original state if update fails.
       await loadLearning();
 
       alert(
@@ -294,7 +290,9 @@ export default function StudentLearningPage() {
       {/* Error */}
       {error && (
         <div className="rounded-2xl border border-red-200 bg-red-50 p-4">
-          <p className="text-sm font-medium text-red-700">{error}</p>
+          <p className="text-sm font-medium text-red-700">
+            {error}
+          </p>
 
           <button
             onClick={loadLearning}
@@ -369,6 +367,12 @@ function LearningCard({
   const isCompleted = progress === "COMPLETED";
   const isInProgress = progress === "IN_PROGRESS";
 
+  const progressPercentage = isCompleted
+    ? 100
+    : isInProgress
+      ? 50
+      : 0;
+
   return (
     <article className="overflow-hidden rounded-2xl border border-slate-200 bg-white transition hover:border-violet-200 hover:shadow-sm">
       {/* Header */}
@@ -399,7 +403,10 @@ function LearningCard({
         {resource.notes ? (
           <div className="rounded-xl bg-slate-50 p-4">
             <div className="flex items-center gap-2">
-              <FileText size={15} className="text-slate-500" />
+              <FileText
+                size={15}
+                className="text-slate-500"
+              />
 
               <p className="text-xs font-semibold text-slate-600">
                 Notes
@@ -416,6 +423,28 @@ function LearningCard({
           </p>
         )}
 
+        {/* Progress */}
+        <div className="mt-5">
+          <div className="mb-2 flex items-center justify-between">
+            <span className="text-xs font-medium text-slate-500">
+              Learning Progress
+            </span>
+
+            <span className="text-xs font-semibold text-violet-600">
+              {progressPercentage}%
+            </span>
+          </div>
+
+          <div className="h-2 overflow-hidden rounded-full bg-slate-100">
+            <div
+              className="h-full rounded-full bg-violet-600 transition-all duration-300"
+              style={{
+                width: `${progressPercentage}%`,
+              }}
+            />
+          </div>
+        </div>
+
         {/* Actions */}
         <div className="mt-5 flex flex-wrap gap-2">
           <a
@@ -424,7 +453,10 @@ function LearningCard({
             rel="noopener noreferrer"
             onClick={() => {
               if (progress === "NOT_STARTED") {
-                onProgressChange(resource._id, "IN_PROGRESS");
+                onProgressChange(
+                  resource._id,
+                  "IN_PROGRESS"
+                );
               }
             }}
             className="inline-flex items-center gap-2 rounded-xl bg-violet-600 px-4 py-2.5 text-xs font-semibold text-white transition hover:bg-violet-700"
@@ -455,7 +487,10 @@ function LearningCard({
               <button
                 type="button"
                 onClick={() =>
-                  onProgressChange(resource._id, "COMPLETED")
+                  onProgressChange(
+                    resource._id,
+                    "COMPLETED"
+                  )
                 }
                 className="inline-flex items-center gap-2 rounded-xl border border-emerald-200 px-4 py-2.5 text-xs font-semibold text-emerald-700 transition hover:bg-emerald-50"
               >
