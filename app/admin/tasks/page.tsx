@@ -58,54 +58,93 @@ export default function TasksPage() {
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
 
-  const loadData = async () => {
-    try {
-      setLoading(true);
-
-      const [tasksResponse, teamsResponse] = await Promise.all([
-        fetch("/api/admin/tasks"),
-        fetch("/api/admin/teams"),
-      ]);
-
-      const tasksData = await tasksResponse.json();
-      const teamsData = await teamsResponse.json();
-
-      if (tasksResponse.ok) {
-        setTasks(tasksData.tasks || []);
-      }
-
-      if (teamsResponse.ok) {
-        setTeams(teamsData.teams || []);
-      }
-    } catch (error) {
-      console.error("Failed to load tasks:", error);
-      setError("Failed to load tasks.");
-    } finally {
-      setLoading(false);
-    }
-  };
-
   useEffect(() => {
     loadData();
   }, []);
 
-  const resetForm = () => {
+  async function loadData() {
+    try {
+      setLoading(true);
+      setError("");
+
+      // Load tasks
+      const tasksResponse = await fetch("/api/admin/tasks", {
+        cache: "no-store",
+      });
+
+      if (!tasksResponse.ok) {
+        const text = await tasksResponse.text();
+
+        console.error("Tasks API response:", text);
+
+        throw new Error(
+          `Tasks API failed with status ${tasksResponse.status}`
+        );
+      }
+
+      const tasksData = await tasksResponse.json();
+
+      // Load teams
+      const teamsResponse = await fetch("/api/admin/teams", {
+        cache: "no-store",
+      });
+
+      if (!teamsResponse.ok) {
+        const text = await teamsResponse.text();
+
+        console.error("Teams API response:", text);
+
+        throw new Error(
+          `Teams API failed with status ${teamsResponse.status}`
+        );
+      }
+
+      const teamsData = await teamsResponse.json();
+
+      console.log("Tasks:", tasksData);
+      console.log("Teams:", teamsData);
+
+      setTasks(tasksData.tasks || []);
+
+      setTeams(
+        (teamsData.teams || []).map(
+          (team: { _id: string; name: string }) => ({
+            _id: team._id,
+            name: team.name,
+          })
+        )
+      );
+    } catch (error) {
+      console.error("Failed to load task data:", error);
+
+      setError(
+        error instanceof Error
+          ? error.message
+          : "Failed to load task data."
+      );
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  function resetForm() {
     setTitle("");
     setDescription("");
     setTeamId("");
     setPriority("MEDIUM");
     setDeadline("");
     setError("");
-  };
+    setSuccess("");
+  }
 
-  const handleCloseModal = () => {
+  function handleCloseModal() {
     if (saving) return;
 
     setShowModal(false);
     resetForm();
-  };
+  }
 
-  const handleCreateTask = async (e: React.FormEvent) => {
+  async function handleCreateTask(e: React.FormEvent) {
     e.preventDefault();
 
     setError("");
@@ -138,12 +177,25 @@ export default function TasksPage() {
         }),
       });
 
-      const data = await response.json();
-
       if (!response.ok) {
-        setError(data.message || "Failed to create task.");
+        const text = await response.text();
+
+        console.error("Create task API response:", text);
+
+        let message = "Failed to create task.";
+
+        try {
+          const data = JSON.parse(text);
+          message = data.message || message;
+        } catch {
+          // Response wasn't JSON
+        }
+
+        setError(message);
         return;
       }
+
+      const data = await response.json();
 
       setTasks((prev) => [data.task, ...prev]);
 
@@ -152,15 +204,19 @@ export default function TasksPage() {
       setTimeout(() => {
         setShowModal(false);
         resetForm();
-        setSuccess("");
       }, 700);
     } catch (error) {
       console.error("Create task error:", error);
-      setError("Something went wrong. Please try again.");
+
+      setError(
+        error instanceof Error
+          ? error.message
+          : "Something went wrong."
+      );
     } finally {
       setSaving(false);
     }
-  };
+  }
 
   const filteredTasks = tasks.filter((task) => {
     const query = search.toLowerCase();
@@ -220,6 +276,13 @@ export default function TasksPage() {
         </button>
       </div>
 
+      {/* Error */}
+      {error && !showModal && (
+        <div className="mb-6 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-600">
+          {error}
+        </div>
+      )}
+
       {/* Stats */}
       <div className="mb-6 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <StatCard
@@ -253,7 +316,6 @@ export default function TasksPage() {
 
       {/* Main Card */}
       <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
-        {/* Toolbar */}
         <div className="flex flex-col gap-4 border-b border-slate-200 p-5 md:flex-row md:items-center md:justify-between">
           <div>
             <h2 className="text-base font-semibold text-slate-900">
@@ -278,7 +340,6 @@ export default function TasksPage() {
           </div>
         </div>
 
-        {/* Table */}
         <div className="overflow-x-auto">
           <table className="w-full min-w-[1050px]">
             <thead>
@@ -343,7 +404,6 @@ export default function TasksPage() {
                     key={task._id}
                     className="transition hover:bg-slate-50/70"
                   >
-                    {/* Task */}
                     <td className="px-6 py-4">
                       <div className="flex items-center gap-3">
                         <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-violet-100 text-violet-600">
@@ -364,7 +424,6 @@ export default function TasksPage() {
                       </div>
                     </td>
 
-                    {/* Team */}
                     <td className="px-6 py-4">
                       <div className="flex items-center gap-2">
                         <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-cyan-50 text-cyan-600">
@@ -377,12 +436,10 @@ export default function TasksPage() {
                       </div>
                     </td>
 
-                    {/* Priority */}
                     <td className="px-6 py-4">
                       <PriorityBadge priority={task.priority} />
                     </td>
 
-                    {/* Deadline */}
                     <td className="px-6 py-4">
                       {task.deadline ? (
                         <div className="flex items-center gap-2 text-sm text-slate-600">
@@ -404,12 +461,10 @@ export default function TasksPage() {
                       )}
                     </td>
 
-                    {/* Status */}
                     <td className="px-6 py-4">
                       <StatusBadge status={task.status} />
                     </td>
 
-                    {/* Created */}
                     <td className="px-6 py-4">
                       <span className="text-sm text-slate-500">
                         {new Date(task.createdAt).toLocaleDateString(
@@ -429,7 +484,6 @@ export default function TasksPage() {
           </table>
         </div>
 
-        {/* Footer */}
         {!loading && filteredTasks.length > 0 && (
           <div className="border-t border-slate-200 bg-slate-50/50 px-6 py-4">
             <p className="text-xs text-slate-500">
@@ -451,7 +505,6 @@ export default function TasksPage() {
       {showModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/40 p-4 backdrop-blur-sm">
           <div className="w-full max-w-lg overflow-hidden rounded-2xl bg-white shadow-2xl">
-            {/* Modal Header */}
             <div className="flex items-center justify-between border-b border-slate-200 px-6 py-5">
               <div>
                 <h2 className="text-lg font-bold text-slate-900">
@@ -471,7 +524,6 @@ export default function TasksPage() {
               </button>
             </div>
 
-            {/* Form */}
             <form onSubmit={handleCreateTask}>
               <div className="space-y-5 p-6">
                 {error && (
@@ -486,7 +538,6 @@ export default function TasksPage() {
                   </div>
                 )}
 
-                {/* Title */}
                 <div>
                   <label className="mb-2 block text-sm font-semibold text-slate-700">
                     Task Title
@@ -501,7 +552,6 @@ export default function TasksPage() {
                   />
                 </div>
 
-                {/* Description */}
                 <div>
                   <label className="mb-2 block text-sm font-semibold text-slate-700">
                     Description
@@ -516,7 +566,6 @@ export default function TasksPage() {
                   />
                 </div>
 
-                {/* Team */}
                 <div>
                   <label className="mb-2 block text-sm font-semibold text-slate-700">
                     Assign Team
@@ -529,15 +578,27 @@ export default function TasksPage() {
                   >
                     <option value="">Select a team</option>
 
-                    {teams.map((team) => (
-                      <option key={team._id} value={team._id}>
-                        {team.name}
+                    {teams.length === 0 ? (
+                      <option value="" disabled>
+                        No teams available
                       </option>
-                    ))}
+                    ) : (
+                      teams.map((team) => (
+                        <option key={team._id} value={team._id}>
+                          {team.name}
+                        </option>
+                      ))
+                    )}
                   </select>
+
+                  {teams.length > 0 && (
+                    <p className="mt-1.5 text-xs text-slate-400">
+                      {teams.length} team
+                      {teams.length !== 1 ? "s" : ""} available
+                    </p>
+                  )}
                 </div>
 
-                {/* Priority + Deadline */}
                 <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                   <div>
                     <label className="mb-2 block text-sm font-semibold text-slate-700">
@@ -548,7 +609,10 @@ export default function TasksPage() {
                       value={priority}
                       onChange={(e) =>
                         setPriority(
-                          e.target.value as "LOW" | "MEDIUM" | "HIGH"
+                          e.target.value as
+                            | "LOW"
+                            | "MEDIUM"
+                            | "HIGH"
                         )
                       }
                       className="h-11 w-full rounded-xl border border-slate-200 bg-white px-4 text-sm text-slate-700 outline-none transition focus:border-violet-400 focus:ring-2 focus:ring-violet-100"
@@ -574,20 +638,19 @@ export default function TasksPage() {
                 </div>
               </div>
 
-              {/* Modal Footer */}
               <div className="flex items-center justify-end gap-3 border-t border-slate-200 bg-slate-50/50 px-6 py-4">
                 <button
                   type="button"
                   onClick={handleCloseModal}
                   disabled={saving}
-                  className="rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+                  className="rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:opacity-50"
                 >
                   Cancel
                 </button>
 
                 <button
                   type="submit"
-                  disabled={saving}
+                  disabled={saving || teams.length === 0}
                   className="inline-flex items-center gap-2 rounded-xl bg-violet-600 px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-violet-700 disabled:cursor-not-allowed disabled:opacity-60"
                 >
                   {saving ? (
@@ -618,7 +681,7 @@ function PriorityBadge({
 }) {
   if (priority === "HIGH") {
     return (
-      <span className="inline-flex items-center rounded-full bg-red-50 px-2.5 py-1 text-xs font-semibold text-red-700">
+      <span className="inline-flex rounded-full bg-red-50 px-2.5 py-1 text-xs font-semibold text-red-700">
         High
       </span>
     );
@@ -626,14 +689,14 @@ function PriorityBadge({
 
   if (priority === "LOW") {
     return (
-      <span className="inline-flex items-center rounded-full bg-slate-100 px-2.5 py-1 text-xs font-semibold text-slate-600">
+      <span className="inline-flex rounded-full bg-slate-100 px-2.5 py-1 text-xs font-semibold text-slate-600">
         Low
       </span>
     );
   }
 
   return (
-    <span className="inline-flex items-center rounded-full bg-amber-50 px-2.5 py-1 text-xs font-semibold text-amber-700">
+    <span className="inline-flex rounded-full bg-amber-50 px-2.5 py-1 text-xs font-semibold text-amber-700">
       Medium
     </span>
   );
@@ -685,9 +748,13 @@ function StatCard({
     <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
       <div className="flex items-center justify-between">
         <div>
-          <p className="text-sm font-medium text-slate-500">{title}</p>
+          <p className="text-sm font-medium text-slate-500">
+            {title}
+          </p>
 
-          <p className="mt-2 text-2xl font-bold text-slate-900">{value}</p>
+          <p className="mt-2 text-2xl font-bold text-slate-900">
+            {value}
+          </p>
         </div>
 
         <div

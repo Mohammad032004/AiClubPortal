@@ -12,10 +12,7 @@ export async function GET() {
 
     if (!session?.user || session.user.role !== "ADMIN") {
       return NextResponse.json(
-        {
-          success: false,
-          message: "Unauthorized",
-        },
+        { message: "Unauthorized" },
         { status: 401 }
       );
     }
@@ -23,8 +20,8 @@ export async function GET() {
     await connectDB();
 
     const teams = await Team.find()
-      .populate("mentor", "name email role")
-      .populate("students", "name email role")
+      .populate("mentor", "name email")
+      .populate("students", "name email")
       .sort({ createdAt: -1 })
       .lean();
 
@@ -38,13 +35,12 @@ export async function GET() {
     return NextResponse.json(
       {
         success: false,
-        message: "Failed to fetch teams.",
+        message: "Failed to fetch teams",
       },
       { status: 500 }
     );
   }
 }
-
 export async function POST(request: Request) {
   try {
     const session = await getServerSession(authOptions);
