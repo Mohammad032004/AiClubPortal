@@ -1,4 +1,5 @@
 "use client";
+import Link from "next/link";
 
 import {
   FolderKanban,
@@ -521,14 +522,17 @@ export default function TeamsPage() {
                         </div>
 
                         <div>
-                          <p className="text-sm font-semibold text-slate-900">
-                            {team.name}
-                          </p>
+  <Link
+    href={`/admin/teams/${team._id}`}
+    className="text-sm font-semibold text-slate-900 transition hover:text-violet-600"
+  >
+    {team.name}
+  </Link>
 
-                          <p className="text-xs text-slate-400">
-                            AI Club Team
-                          </p>
-                        </div>
+  <p className="text-xs text-slate-400">
+    AI Club Team
+  </p>
+</div>
                       </div>
                     </td>
 
