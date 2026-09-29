@@ -20,12 +20,6 @@ const taskSubmissionSchema = new Schema(
       trim: true,
     },
 
-    githubUrl: {
-      type: String,
-      default: "",
-      trim: true,
-    },
-
     demoUrl: {
       type: String,
       default: "",

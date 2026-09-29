@@ -40,7 +40,6 @@ export async function GET(
       );
     }
 
-    // Make sure the student belongs to the task's team.
     const team = await Team.findOne({
       _id: task.team,
       $or: [
@@ -99,8 +98,8 @@ export async function POST(
     const body = await request.json();
 
     const description = body.description?.trim() || "";
-    const githubUrl = body.githubUrl?.trim() || "";
     const demoUrl = body.demoUrl?.trim() || "";
+
     const screenshots = Array.isArray(body.screenshots)
       ? body.screenshots.filter(
           (item: unknown) =>
@@ -108,11 +107,16 @@ export async function POST(
         )
       : [];
 
-    if (!description && !githubUrl && !demoUrl && screenshots.length === 0) {
+    if (
+      !description &&
+      !demoUrl &&
+      screenshots.length === 0
+    ) {
       return NextResponse.json(
         {
           success: false,
-          message: "Please provide at least one submission detail",
+          message:
+            "Please provide a description, demo URL, or screenshot",
         },
         { status: 400 }
       );
@@ -129,7 +133,6 @@ export async function POST(
       );
     }
 
-    // Security check.
     const team = await Team.findOne({
       _id: task.team,
       $or: [
@@ -148,31 +151,31 @@ export async function POST(
       );
     }
 
-    const submission = await TaskSubmission.findOneAndUpdate(
-      {
-        task: id,
-        student: session.user.id,
-      },
-      {
-        $set: {
-          description,
-          githubUrl,
-          demoUrl,
-          screenshots,
-          status: "SUBMITTED",
-          mentorComment: "",
-          reviewedAt: null,
+    const submission =
+      await TaskSubmission.findOneAndUpdate(
+        {
+          task: id,
+          student: session.user.id,
         },
-      },
-      {
-        new: true,
-        upsert: true,
-        setDefaultsOnInsert: true,
-      }
-    )
-      .populate("task", "title")
-      .populate("student", "name email")
-      .lean();
+        {
+          $set: {
+            description,
+            demoUrl,
+            screenshots,
+            status: "SUBMITTED",
+            mentorComment: "",
+            reviewedAt: null,
+          },
+        },
+        {
+          new: true,
+          upsert: true,
+          setDefaultsOnInsert: true,
+        }
+      )
+        .populate("task", "title")
+        .populate("student", "name email")
+        .lean();
 
     return NextResponse.json(
       {
