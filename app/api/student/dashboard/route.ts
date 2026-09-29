@@ -3,7 +3,6 @@ import { getServerSession } from "next-auth";
 
 import { authOptions } from "@/lib/auth";
 import { connectDB } from "@/lib/mongodb";
-import User from "@/models/User";
 import Team from "@/models/Team";
 import Learning from "@/models/Learning";
 import Task from "@/models/Task";
@@ -15,7 +14,10 @@ export async function GET() {
 
     if (!session?.user || session.user.role !== "STUDENT") {
       return NextResponse.json(
-        { success: false, message: "Unauthorized" },
+        {
+          success: false,
+          message: "Unauthorized",
+        },
         { status: 401 }
       );
     }
@@ -24,20 +26,6 @@ export async function GET() {
 
     const studentId = session.user.id;
 
-    const student = await User.findById(studentId)
-      .select("name email role")
-      .lean();
-
-    if (!student) {
-      return NextResponse.json(
-        { success: false, message: "Student not found" },
-        { status: 404 }
-      );
-    }
-
-    // Find the student's team.
-    // The second condition also supports older team records
-    // that used the "members" field.
     const team = await Team.findOne({
       $or: [
         { students: studentId },
@@ -45,71 +33,104 @@ export async function GET() {
       ],
     })
       .populate("mentor", "name email")
-      .populate("students", "name email")
       .lean();
 
-    const teamId = team?._id;
-
-    let learningCount = 0;
-    let activeLearningCount = 0;
-    let pendingTasks = 0;
-    let completedTasks = 0;
-    let totalTasks = 0;
-    let projectCount = 0;
-    let currentProject = null;
-
-    if (teamId) {
-      learningCount = await Learning.countDocuments({
-        team: teamId,
+    if (!team) {
+      return NextResponse.json({
+        success: true,
+        student: {
+          name: session.user.name || "Student",
+          email: session.user.email || "",
+        },
+        team: null,
+        stats: {
+          learning: 0,
+          activeLearning: 0,
+          tasks: 0,
+          pendingTasks: 0,
+          completedTasks: 0,
+          projects: 0,
+        },
+        currentProject: null,
       });
+    }
 
-      activeLearningCount = await Learning.countDocuments({
+    const teamId = team._id;
+
+    const [
+      learningCount,
+      activeLearningCount,
+      taskCount,
+      pendingTaskCount,
+      completedTaskCount,
+      projectCount,
+      currentProject,
+    ] = await Promise.all([
+      Learning.countDocuments({ team: teamId }),
+
+      Learning.countDocuments({
         team: teamId,
         status: "ACTIVE",
-      });
+      }),
 
-      pendingTasks = await Task.countDocuments({
+      Task.countDocuments({ team: teamId }),
+
+      Task.countDocuments({
         team: teamId,
-        status: { $in: ["PENDING", "IN_PROGRESS"] },
-      });
+        status: {
+          $in: ["PENDING", "IN_PROGRESS"],
+        },
+      }),
 
-      completedTasks = await Task.countDocuments({
+      Task.countDocuments({
         team: teamId,
         status: "COMPLETED",
-      });
+      }),
 
-      totalTasks = await Task.countDocuments({
-        team: teamId,
-      });
+      Project.countDocuments({ team: teamId }),
 
-      projectCount = await Project.countDocuments({
+      Project.findOne({
         team: teamId,
-      });
-
-      currentProject = await Project.findOne({
-        team: teamId,
-        status: { $in: ["PLANNING", "IN_PROGRESS"] },
+        status: {
+          $in: ["PLANNING", "IN_PROGRESS"],
+        },
       })
         .sort({ createdAt: -1 })
-        .select(
-          "title description status progress demoUrl documentationUrl createdAt"
-        )
-        .lean();
-    }
+        .lean(),
+    ]);
 
     return NextResponse.json({
       success: true,
-      student,
-      team: team || null,
-      stats: {
-        learningCount,
-        activeLearningCount,
-        pendingTasks,
-        completedTasks,
-        totalTasks,
-        projectCount,
+
+      student: {
+        name: session.user.name || "Student",
+        email: session.user.email || "",
       },
-      currentProject,
+
+      team: {
+        _id: team._id,
+        name: team.name,
+        status: team.status || "ACTIVE",
+        mentor: team.mentor || null,
+      },
+
+      stats: {
+        learning: learningCount,
+        activeLearning: activeLearningCount,
+        tasks: taskCount,
+        pendingTasks: pendingTaskCount,
+        completedTasks: completedTaskCount,
+        projects: projectCount,
+      },
+
+      currentProject: currentProject
+        ? {
+            _id: currentProject._id,
+            title: currentProject.title,
+            status: currentProject.status,
+            progress: currentProject.progress || 0,
+          }
+        : null,
     });
   } catch (error) {
     console.error("Student dashboard error:", error);
@@ -117,7 +138,7 @@ export async function GET() {
     return NextResponse.json(
       {
         success: false,
-        message: "Failed to load student dashboard",
+        message: "Failed to fetch dashboard",
       },
       { status: 500 }
     );
