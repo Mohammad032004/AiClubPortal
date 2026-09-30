@@ -4,7 +4,6 @@ import {
   Bell,
   BookOpen,
   CheckSquare,
-  ChevronDown,
   FolderKanban,
   LayoutDashboard,
   LogOut,
@@ -15,8 +14,10 @@ import {
   Users,
   X,
 } from "lucide-react";
+
 import Link from "next/link";
 import { useState } from "react";
+import { signOut } from "next-auth/react";
 
 const navigation = [
   {
@@ -98,6 +99,7 @@ export default function AdminLayout({
           </div>
 
           <button
+            type="button"
             onClick={() => setSidebarOpen(false)}
             className="rounded-lg p-2 text-slate-400 hover:bg-slate-100 lg:hidden"
           >
@@ -135,6 +137,7 @@ export default function AdminLayout({
 
           <Link
             href="/admin/settings"
+            onClick={() => setSidebarOpen(false)}
             className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium text-slate-600 transition hover:bg-slate-50 hover:text-slate-900"
           >
             <Settings size={18} />
@@ -144,6 +147,23 @@ export default function AdminLayout({
 
         {/* Admin Profile */}
         <div className="border-t border-slate-100 p-4">
+          {/* Logout */}
+          <button
+  type="button"
+  onClick={async () => {
+    await signOut({
+      redirect: false,
+    });
+
+    window.location.href = "/login";
+  }}
+  className="mb-3 flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium text-slate-600 transition hover:bg-red-50 hover:text-red-600"
+>
+  <LogOut size={17} />
+  <span>Logout</span>
+</button>
+
+          {/* Profile */}
           <div className="flex items-center gap-3 rounded-xl p-2">
             <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-violet-100 text-sm font-bold text-violet-700">
               AC
@@ -158,10 +178,6 @@ export default function AdminLayout({
                 Administrator
               </p>
             </div>
-
-            <button className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-700">
-              <LogOut size={17} />
-            </button>
           </div>
         </div>
       </aside>
@@ -172,6 +188,7 @@ export default function AdminLayout({
         <header className="sticky top-0 z-30 flex h-20 items-center justify-between border-b border-slate-200 bg-white/95 px-5 backdrop-blur lg:px-8">
           <div className="flex items-center gap-3">
             <button
+              type="button"
               onClick={() => setSidebarOpen(true)}
               className="rounded-lg p-2 text-slate-600 hover:bg-slate-100 lg:hidden"
             >
@@ -191,14 +208,17 @@ export default function AdminLayout({
 
           <div className="flex items-center gap-3">
             {/* Notifications */}
-            <button className="relative rounded-xl border border-slate-200 p-2.5 text-slate-500 transition hover:bg-slate-50 hover:text-slate-900">
+            <button
+              type="button"
+              className="relative rounded-xl border border-slate-200 p-2.5 text-slate-500 transition hover:bg-slate-50 hover:text-slate-900"
+            >
               <Bell size={19} />
 
               <span className="absolute right-2 top-2 h-1.5 w-1.5 rounded-full bg-violet-600" />
             </button>
 
             {/* Profile */}
-            <button className="hidden items-center gap-2 rounded-xl border border-slate-200 px-3 py-2 transition hover:bg-slate-50 sm:flex">
+            <div className="hidden items-center gap-2 rounded-xl border border-slate-200 px-3 py-2 sm:flex">
               <div className="flex h-7 w-7 items-center justify-center rounded-full bg-violet-100 text-xs font-bold text-violet-700">
                 AC
               </div>
@@ -206,12 +226,7 @@ export default function AdminLayout({
               <span className="text-sm font-medium">
                 Admin
               </span>
-
-              <ChevronDown
-                size={15}
-                className="text-slate-400"
-              />
-            </button>
+            </div>
           </div>
         </header>
 
