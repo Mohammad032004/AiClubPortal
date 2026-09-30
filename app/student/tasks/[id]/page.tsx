@@ -12,6 +12,8 @@ import {
   Loader2,
   Send,
   UserRound,
+  Clock3,
+  AlertCircle,
 } from "lucide-react";
 
 type Task = {
@@ -74,12 +76,9 @@ export default function StudentTaskDetailsPage() {
           fetch(`/api/student/tasks/${taskId}`, {
             cache: "no-store",
           }),
-          fetch(
-            `/api/student/tasks/${taskId}/submission`,
-            {
-              cache: "no-store",
-            }
-          ),
+          fetch(`/api/student/tasks/${taskId}/submission`, {
+            cache: "no-store",
+          }),
         ]);
 
       const taskResult = await taskResponse.json();
@@ -200,13 +199,17 @@ export default function StudentTaskDetailsPage() {
     return (
       <div className="flex min-h-[60vh] items-center justify-center">
         <div className="max-w-md rounded-2xl border border-red-200 bg-white p-8 text-center">
-          <p className="text-sm font-semibold text-red-700">
+          <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-xl bg-red-50 text-red-600">
+            <AlertCircle size={22} />
+          </div>
+
+          <p className="mt-4 text-sm font-semibold text-red-700">
             {error}
           </p>
 
           <Link
             href="/student/tasks"
-            className="mt-5 inline-flex items-center gap-2 rounded-xl bg-violet-600 px-4 py-2.5 text-sm font-semibold text-white"
+            className="mt-5 inline-flex items-center gap-2 rounded-xl bg-violet-600 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-violet-700"
           >
             <ArrowLeft size={15} />
             Back to Tasks
@@ -217,6 +220,11 @@ export default function StudentTaskDetailsPage() {
   }
 
   if (!task) return null;
+
+  const overdue =
+    Boolean(task.deadline) &&
+    task.status !== "COMPLETED" &&
+    new Date(task.deadline as string).getTime() < Date.now();
 
   return (
     <div className="mx-auto max-w-5xl space-y-6">
@@ -244,7 +252,12 @@ export default function StudentTaskDetailsPage() {
       )}
 
       {error && (
-        <div className="rounded-2xl border border-red-200 bg-red-50 p-4">
+        <div className="flex items-start gap-3 rounded-2xl border border-red-200 bg-red-50 p-4">
+          <AlertCircle
+            size={18}
+            className="mt-0.5 shrink-0 text-red-600"
+          />
+
           <p className="text-sm font-medium text-red-700">
             {error}
           </p>
@@ -253,7 +266,7 @@ export default function StudentTaskDetailsPage() {
 
       {/* Task Header */}
       <section className="rounded-2xl border border-slate-200 bg-white p-6 sm:p-8">
-        <div className="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
+        <div className="flex flex-col gap-6 lg:flex-row lg:items-start lg:justify-between">
           <div className="min-w-0">
             <div className="flex flex-wrap items-center gap-2">
               <PriorityBadge priority={task.priority} />
@@ -264,22 +277,44 @@ export default function StudentTaskDetailsPage() {
               {task.title}
             </h1>
 
-            <p className="mt-3 text-sm leading-6 text-slate-500">
+            <p className="mt-3 max-w-3xl text-sm leading-6 text-slate-500">
               {task.description ||
                 "No description provided."}
             </p>
           </div>
 
-          <div className="shrink-0 rounded-xl bg-slate-50 p-4 lg:w-48">
-            <div className="flex items-center gap-2 text-slate-500">
-              <CalendarDays size={16} />
+          <div
+            className={`shrink-0 rounded-xl p-4 lg:w-52 ${
+              overdue
+                ? "border border-red-200 bg-red-50"
+                : "bg-slate-50"
+            }`}
+          >
+            <div
+              className={`flex items-center gap-2 ${
+                overdue
+                  ? "text-red-600"
+                  : "text-slate-500"
+              }`}
+            >
+              {overdue ? (
+                <AlertCircle size={16} />
+              ) : (
+                <CalendarDays size={16} />
+              )}
 
               <span className="text-xs font-medium">
-                Deadline
+                {overdue ? "Overdue" : "Deadline"}
               </span>
             </div>
 
-            <p className="mt-2 text-sm font-semibold text-slate-800">
+            <p
+              className={`mt-2 text-sm font-semibold ${
+                overdue
+                  ? "text-red-700"
+                  : "text-slate-800"
+              }`}
+            >
               {task.deadline
                 ? formatDate(task.deadline)
                 : "No deadline"}
@@ -287,6 +322,7 @@ export default function StudentTaskDetailsPage() {
           </div>
         </div>
 
+        {/* Task Information */}
         <div className="mt-6 grid grid-cols-1 gap-3 border-t border-slate-100 pt-5 sm:grid-cols-2">
           <InfoItem
             icon={<ClipboardList size={16} />}
@@ -322,8 +358,52 @@ export default function StudentTaskDetailsPage() {
             />
           </div>
 
+          {/* Submitted Work */}
+          {submission.description && (
+            <div className="mt-5 rounded-xl bg-slate-50 p-4">
+              <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">
+                Work Description
+              </p>
+
+              <p className="mt-2 whitespace-pre-wrap text-sm leading-6 text-slate-600">
+                {submission.description}
+              </p>
+            </div>
+          )}
+
+          {/* Demo */}
+          {submission.demoUrl && (
+            <a
+              href={submission.demoUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="mt-3 flex items-center justify-between rounded-xl border border-slate-200 p-4 transition hover:border-violet-200 hover:bg-violet-50/50"
+            >
+              <div className="flex items-center gap-3">
+                <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-violet-50 text-violet-600">
+                  <ExternalLink size={16} />
+                </div>
+
+                <div>
+                  <p className="text-sm font-semibold text-slate-700">
+                    Live Demo
+                  </p>
+
+                  <p className="mt-0.5 max-w-[250px] truncate text-xs text-slate-400">
+                    {submission.demoUrl}
+                  </p>
+                </div>
+              </div>
+
+              <span className="text-xs font-semibold text-violet-600">
+                Open
+              </span>
+            </a>
+          )}
+
+          {/* Mentor Feedback */}
           {submission.mentorComment && (
-            <div className="mt-5 rounded-xl border border-amber-200 bg-amber-50 p-4">
+            <div className="mt-4 rounded-xl border border-amber-200 bg-amber-50 p-4">
               <p className="text-xs font-semibold text-amber-700">
                 Mentor Feedback
               </p>
@@ -333,22 +413,44 @@ export default function StudentTaskDetailsPage() {
               </p>
             </div>
           )}
+
+          {/* Approved Message */}
+          {submission.status === "APPROVED" && (
+            <div className="mt-4 flex items-center gap-3 rounded-xl border border-emerald-200 bg-emerald-50 p-4">
+              <CheckCircle2
+                size={18}
+                className="shrink-0 text-emerald-600"
+              />
+
+              <p className="text-sm font-medium text-emerald-700">
+                Your submission has been approved by the mentor.
+              </p>
+            </div>
+          )}
         </section>
       )}
 
       {/* Submission Form */}
       <section className="rounded-2xl border border-slate-200 bg-white">
         <div className="border-b border-slate-200 px-6 py-5">
-          <h2 className="text-base font-bold text-slate-900">
-            {submission
-              ? "Update Your Submission"
-              : "Submit Your Work"}
-          </h2>
+          <div className="flex items-center gap-3">
+            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-violet-50 text-violet-600">
+              <Send size={17} />
+            </div>
 
-          <p className="mt-1 text-xs text-slate-500">
-            Provide the details of the work you completed
-            for this task.
-          </p>
+            <div>
+              <h2 className="text-base font-bold text-slate-900">
+                {submission
+                  ? "Update Your Submission"
+                  : "Submit Your Work"}
+              </h2>
+
+              <p className="mt-1 text-xs text-slate-500">
+                Provide the details of the work you completed
+                for this task.
+              </p>
+            </div>
+          </div>
         </div>
 
         <form
@@ -366,10 +468,16 @@ export default function StudentTaskDetailsPage() {
               onChange={(event) =>
                 setDescription(event.target.value)
               }
-              rows={6}
+              rows={7}
               placeholder="Explain what you completed, what you learned, and how your solution works..."
               className="w-full resize-none rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm leading-6 text-slate-700 outline-none transition placeholder:text-slate-400 focus:border-violet-400 focus:bg-white focus:ring-2 focus:ring-violet-100"
             />
+
+            <div className="mt-2 flex justify-end">
+              <span className="text-xs text-slate-400">
+                {description.length} characters
+              </span>
+            </div>
           </div>
 
           {/* Live Demo */}
@@ -398,21 +506,38 @@ export default function StudentTaskDetailsPage() {
 
           {/* Screenshots */}
           <div className="rounded-xl border border-dashed border-slate-300 bg-slate-50 p-5">
-            <p className="text-sm font-semibold text-slate-700">
-              Screenshots
-            </p>
+            <div className="flex items-center gap-2">
+              <ClipboardList
+                size={16}
+                className="text-slate-400"
+              />
 
-            <p className="mt-1 text-xs text-slate-400">
+              <p className="text-sm font-semibold text-slate-700">
+                Screenshots
+              </p>
+            </div>
+
+            <p className="mt-1 text-xs leading-5 text-slate-400">
               Screenshot uploads will be added separately.
             </p>
           </div>
 
           {/* Submit */}
-          <div className="flex justify-end border-t border-slate-100 pt-5">
+          <div className="flex flex-col-reverse gap-3 border-t border-slate-100 pt-5 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex items-center gap-2 text-xs text-slate-400">
+              <Clock3 size={14} />
+
+              <span>
+                {submission
+                  ? "You can update your submission anytime."
+                  : "Submit your work when you are ready."}
+              </span>
+            </div>
+
             <button
               type="submit"
               disabled={submitting}
-              className="inline-flex items-center gap-2 rounded-xl bg-violet-600 px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-violet-700 disabled:cursor-not-allowed disabled:opacity-60"
+              className="inline-flex items-center justify-center gap-2 rounded-xl bg-violet-600 px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-violet-700 disabled:cursor-not-allowed disabled:opacity-60"
             >
               {submitting ? (
                 <>
@@ -451,12 +576,12 @@ function InfoItem({
     <div className="flex items-center gap-3 rounded-xl bg-slate-50 p-4">
       <div className="text-slate-400">{icon}</div>
 
-      <div>
+      <div className="min-w-0">
         <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
           {label}
         </p>
 
-        <p className="mt-1 text-sm font-medium text-slate-700">
+        <p className="mt-1 truncate text-sm font-medium text-slate-700">
           {value}
         </p>
       </div>

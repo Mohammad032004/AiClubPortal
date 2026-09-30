@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import {
   ClipboardList,
@@ -17,59 +18,145 @@ type Task = {
   description: string;
   priority: "LOW" | "MEDIUM" | "HIGH";
   status: "PENDING" | "IN_PROGRESS" | "COMPLETED";
-  deadline?: string;
+  deadline?: string | null;
   createdAt: string;
   team?: {
     _id: string;
     name: string;
   };
   createdBy?: {
+    _id: string;
     name: string;
     email: string;
   };
 };
 
+function PriorityBadge({
+  priority,
+}: {
+  priority: Task["priority"];
+}) {
+  const styles = {
+    LOW: "bg-slate-100 text-slate-600",
+    MEDIUM: "bg-amber-50 text-amber-700",
+    HIGH: "bg-red-50 text-red-600",
+  };
+
+  return (
+    <span
+      className={`rounded-full px-2.5 py-1 text-xs font-semibold ${styles[priority]}`}
+    >
+      {priority}
+    </span>
+  );
+}
+
+function StatusBadge({
+  status,
+}: {
+  status: Task["status"];
+}) {
+  const styles = {
+    PENDING: "bg-slate-100 text-slate-600",
+    IN_PROGRESS: "bg-violet-50 text-violet-700",
+    COMPLETED: "bg-emerald-50 text-emerald-700",
+  };
+
+  const labels = {
+    PENDING: "Pending",
+    IN_PROGRESS: "In Progress",
+    COMPLETED: "Completed",
+  };
+
+  return (
+    <span
+      className={`rounded-full px-2.5 py-1 text-xs font-semibold ${styles[status]}`}
+    >
+      {labels[status]}
+    </span>
+  );
+}
+
+function StatCard({
+  label,
+  value,
+  icon,
+}: {
+  label: string;
+  value: number;
+  icon: React.ReactNode;
+}) {
+  return (
+    <div className="rounded-2xl border border-slate-200 bg-white p-5">
+      <div className="flex items-center justify-between">
+        <div>
+          <p className="text-sm font-medium text-slate-500">{label}</p>
+          <p className="mt-2 text-2xl font-bold text-slate-900">{value}</p>
+        </div>
+
+        <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-violet-50 text-violet-600">
+          {icon}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function formatDate(date?: string | null) {
+  if (!date) return "No deadline";
+
+  return new Date(date).toLocaleDateString("en-IN", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+  });
+}
+
+function isOverdue(task: Task) {
+  if (!task.deadline || task.status === "COMPLETED") return false;
+
+  return new Date(task.deadline).getTime() < Date.now();
+}
+
 export default function StudentTasksPage() {
   const [tasks, setTasks] = useState<Task[]>([]);
+  const [search, setSearch] = useState("");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
-  const [search, setSearch] = useState("");
 
   useEffect(() => {
+    async function loadTasks() {
+      try {
+        setLoading(true);
+        setError("");
+
+        const response = await fetch("/api/student/tasks");
+
+        const data = await response.json();
+
+        if (!response.ok || !data.success) {
+          throw new Error(data.message || "Failed to load tasks");
+        }
+
+        setTasks(data.tasks || []);
+      } catch (error) {
+        console.error("Student tasks error:", error);
+
+        setError(
+          error instanceof Error
+            ? error.message
+            : "Failed to load tasks"
+        );
+      } finally {
+        setLoading(false);
+      }
+    }
+
     loadTasks();
   }, []);
 
-  async function loadTasks() {
-    try {
-      setLoading(true);
-      setError("");
-
-      const response = await fetch("/api/student/tasks", {
-        cache: "no-store",
-      });
-
-      const result = await response.json();
-
-      if (!response.ok) {
-        throw new Error(result.message || "Failed to load tasks");
-      }
-
-      setTasks(result.tasks || []);
-    } catch (error) {
-      console.error("Tasks error:", error);
-
-      setError(
-        error instanceof Error
-          ? error.message
-          : "Failed to load tasks"
-      );
-    } finally {
-      setLoading(false);
-    }
-  }
-
   const filteredTasks = useMemo(() => {
-    const query = search.toLowerCase().trim();
+    const query = search.trim().toLowerCase();
 
     if (!query) return tasks;
 
@@ -83,311 +170,215 @@ export default function StudentTasksPage() {
     });
   }, [tasks, search]);
 
-  const pendingCount = tasks.filter(
-    (task) => task.status === "PENDING"
-  ).length;
-
-  const inProgressCount = tasks.filter(
-    (task) => task.status === "IN_PROGRESS"
-  ).length;
-
-  const completedCount = tasks.filter(
-    (task) => task.status === "COMPLETED"
-  ).length;
+  const stats = useMemo(() => {
+    return {
+      total: tasks.length,
+      pending: tasks.filter((task) => task.status === "PENDING").length,
+      inProgress: tasks.filter(
+        (task) => task.status === "IN_PROGRESS"
+      ).length,
+      completed: tasks.filter(
+        (task) => task.status === "COMPLETED"
+      ).length,
+    };
+  }, [tasks]);
 
   return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div>
-        <p className="text-sm font-medium text-violet-600">
-          Task Workspace
-        </p>
-
-        <h1 className="mt-1 text-2xl font-bold tracking-tight text-slate-900">
-          My Tasks
-        </h1>
-
-        <p className="mt-1 text-sm text-slate-500">
-          Complete the practical tasks assigned to your team.
-        </p>
-      </div>
-
-      {/* Stats */}
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        <StatCard
-          title="Total Tasks"
-          value={tasks.length}
-          icon={<ClipboardList size={20} />}
-          iconClass="bg-violet-100 text-violet-700"
-        />
-
-        <StatCard
-          title="Pending"
-          value={pendingCount}
-          icon={<CircleDot size={20} />}
-          iconClass="bg-slate-100 text-slate-600"
-        />
-
-        <StatCard
-          title="In Progress"
-          value={inProgressCount}
-          icon={<Clock3 size={20} />}
-          iconClass="bg-amber-100 text-amber-700"
-        />
-
-        <StatCard
-          title="Completed"
-          value={completedCount}
-          icon={<CheckCircle2 size={20} />}
-          iconClass="bg-emerald-100 text-emerald-700"
-        />
-      </div>
-
-      {/* Search */}
-      <div className="rounded-2xl border border-slate-200 bg-white p-4">
-        <div className="relative w-full sm:max-w-md">
-          <Search
-            size={17}
-            className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"
-          />
-
-          <input
-            type="text"
-            placeholder="Search tasks..."
-            value={search}
-            onChange={(event) => setSearch(event.target.value)}
-            className="w-full rounded-xl border border-slate-200 bg-slate-50 py-2.5 pl-10 pr-4 text-sm text-slate-700 outline-none transition placeholder:text-slate-400 focus:border-violet-400 focus:bg-white focus:ring-2 focus:ring-violet-100"
-          />
-        </div>
-      </div>
-
-      {/* Error */}
-      {error && (
-        <div className="rounded-2xl border border-red-200 bg-red-50 p-4">
-          <p className="text-sm font-medium text-red-700">
-            {error}
+    <div className="min-h-full bg-slate-50">
+      <div className="mx-auto max-w-7xl space-y-6 p-6 lg:p-8">
+        {/* Header */}
+        <div>
+          <p className="text-sm font-medium text-violet-600">
+            Student Portal
           </p>
 
-          <button
-            onClick={loadTasks}
-            className="mt-2 text-xs font-semibold text-red-700 underline"
-          >
-            Try again
-          </button>
-        </div>
-      )}
+          <h1 className="mt-1 text-2xl font-bold tracking-tight text-slate-900">
+            Tasks
+          </h1>
 
-      {/* Loading */}
-      {loading ? (
-        <div className="space-y-4">
-          {[1, 2, 3].map((item) => (
-            <div
-              key={item}
-              className="h-44 animate-pulse rounded-2xl border border-slate-200 bg-white"
-            />
-          ))}
+          <p className="mt-1 text-sm text-slate-500">
+            Complete your assigned practical tasks and keep track of
+            your progress.
+          </p>
         </div>
-      ) : filteredTasks.length === 0 ? (
-        <div className="rounded-2xl border border-slate-200 bg-white">
-          <div className="flex flex-col items-center justify-center px-6 py-16 text-center">
-            <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-slate-100 text-slate-400">
-              <ClipboardList size={26} />
+
+        {/* Stats */}
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+          <StatCard
+            label="Total Tasks"
+            value={stats.total}
+            icon={<ClipboardList size={20} />}
+          />
+
+          <StatCard
+            label="Pending"
+            value={stats.pending}
+            icon={<CircleDot size={20} />}
+          />
+
+          <StatCard
+            label="In Progress"
+            value={stats.inProgress}
+            icon={<Clock3 size={20} />}
+          />
+
+          <StatCard
+            label="Completed"
+            value={stats.completed}
+            icon={<CheckCircle2 size={20} />}
+          />
+        </div>
+
+        {/* Search */}
+        <div className="rounded-2xl border border-slate-200 bg-white p-4">
+          <div className="relative">
+            <Search
+              size={18}
+              className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"
+            />
+
+            <input
+              type="text"
+              value={search}
+              onChange={(event) => setSearch(event.target.value)}
+              placeholder="Search tasks..."
+              className="h-11 w-full rounded-xl border border-slate-200 bg-slate-50 pl-10 pr-4 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-violet-400 focus:bg-white focus:ring-2 focus:ring-violet-100"
+            />
+          </div>
+        </div>
+
+        {/* Loading */}
+        {loading && (
+          <div className="rounded-2xl border border-slate-200 bg-white p-12 text-center">
+            <div className="mx-auto h-8 w-8 animate-spin rounded-full border-2 border-slate-200 border-t-violet-600" />
+
+            <p className="mt-4 text-sm text-slate-500">
+              Loading tasks...
+            </p>
+          </div>
+        )}
+
+        {/* Error */}
+        {!loading && error && (
+          <div className="rounded-2xl border border-red-200 bg-red-50 p-6">
+            <div className="flex items-start gap-3">
+              <AlertCircle
+                size={20}
+                className="mt-0.5 text-red-600"
+              />
+
+              <div>
+                <h2 className="text-sm font-semibold text-red-800">
+                  Unable to load tasks
+                </h2>
+
+                <p className="mt-1 text-sm text-red-600">
+                  {error}
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Empty */}
+        {!loading && !error && filteredTasks.length === 0 && (
+          <div className="rounded-2xl border border-slate-200 bg-white p-12 text-center">
+            <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-violet-50 text-violet-600">
+              <ClipboardList size={24} />
             </div>
 
-            <h2 className="mt-4 text-base font-bold text-slate-800">
+            <h2 className="mt-4 text-base font-semibold text-slate-900">
               {search ? "No tasks found" : "No tasks assigned"}
             </h2>
 
-            <p className="mt-2 max-w-md text-sm text-slate-400">
+            <p className="mx-auto mt-1 max-w-md text-sm text-slate-500">
               {search
-                ? "Try searching with a different keyword."
-                : "Tasks assigned to your team will appear here."}
+                ? "Try changing your search term."
+                : "Your mentor will assign practical tasks here."}
             </p>
           </div>
-        </div>
-      ) : (
-        <div className="space-y-4">
-          {filteredTasks.map((task) => (
-            <TaskCard key={task._id} task={task} />
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
+        )}
 
-function TaskCard({ task }: { task: Task }) {
-  const isCompleted = task.status === "COMPLETED";
-  const isInProgress = task.status === "IN_PROGRESS";
+        {/* Tasks */}
+        {!loading && !error && filteredTasks.length > 0 && (
+          <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
+            {filteredTasks.map((task) => {
+              const overdue = isOverdue(task);
 
-  return (
-    <article className="rounded-2xl border border-slate-200 bg-white p-5 transition hover:border-violet-200 hover:shadow-sm">
-      <div className="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
-        {/* Main */}
-        <div className="min-w-0 flex-1">
-          <div className="flex flex-wrap items-center gap-2">
-            <h2 className="text-base font-bold text-slate-900">
-              {task.title}
-            </h2>
+              return (
+                <Link
+                  key={task._id}
+                  href={`/student/tasks/${task._id}`}
+                  className="block rounded-2xl border border-slate-200 bg-white p-5 transition hover:border-violet-200 hover:shadow-sm"
+                >
+                  <div className="flex items-start justify-between gap-4">
+                    <div className="min-w-0">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <PriorityBadge priority={task.priority} />
+                        <StatusBadge status={task.status} />
+                      </div>
 
-            <PriorityBadge priority={task.priority} />
-            <StatusBadge status={task.status} />
+                      <h2 className="mt-3 text-base font-semibold text-slate-900">
+                        {task.title}
+                      </h2>
+                    </div>
+
+                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-violet-50 text-violet-600">
+                      <ClipboardList size={19} />
+                    </div>
+                  </div>
+
+                  <p className="mt-3 line-clamp-3 text-sm leading-6 text-slate-500">
+                    {task.description || "No description provided."}
+                  </p>
+
+                  <div className="mt-5 grid grid-cols-1 gap-3 sm:grid-cols-2">
+                    <div className="rounded-xl bg-slate-50 p-3">
+                      <p className="text-xs font-medium text-slate-400">
+                        Team
+                      </p>
+
+                      <p className="mt-1 truncate text-sm font-medium text-slate-700">
+                        {task.team?.name || "No team"}
+                      </p>
+                    </div>
+
+                    <div className="rounded-xl bg-slate-50 p-3">
+                      <p className="text-xs font-medium text-slate-400">
+                        Assigned By
+                      </p>
+
+                      <p className="mt-1 truncate text-sm font-medium text-slate-700">
+                        {task.createdBy?.name || "Mentor"}
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="mt-4 flex items-center justify-between border-t border-slate-100 pt-4">
+                    <div
+                      className={`flex items-center gap-2 text-xs font-medium ${
+                        overdue ? "text-red-600" : "text-slate-500"
+                      }`}
+                    >
+                      <CalendarDays size={15} />
+
+                      <span>
+                        {overdue
+                          ? `Overdue · ${formatDate(task.deadline)}`
+                          : formatDate(task.deadline)}
+                      </span>
+                    </div>
+
+                    <span className="text-xs font-semibold text-violet-600">
+                      View Task →
+                    </span>
+                  </div>
+                </Link>
+              );
+            })}
           </div>
-
-          <p className="mt-2 text-sm leading-6 text-slate-500">
-            {task.description || "No description provided."}
-          </p>
-
-          <div className="mt-4 flex flex-wrap gap-x-5 gap-y-2 text-xs text-slate-400">
-            {task.team && (
-              <span>
-                Team:{" "}
-                <span className="font-medium text-slate-600">
-                  {task.team.name}
-                </span>
-              </span>
-            )}
-
-            {task.createdBy && (
-              <span>
-                Assigned by:{" "}
-                <span className="font-medium text-slate-600">
-                  {task.createdBy.name}
-                </span>
-              </span>
-            )}
-          </div>
-        </div>
-
-        {/* Deadline */}
-        <div className="shrink-0 lg:w-44">
-          {task.deadline ? (
-            <div className="rounded-xl bg-slate-50 p-4">
-              <div className="flex items-center gap-2 text-slate-500">
-                <CalendarDays size={15} />
-
-                <span className="text-xs font-medium">
-                  Deadline
-                </span>
-              </div>
-
-              <p className="mt-2 text-sm font-semibold text-slate-800">
-                {formatDate(task.deadline)}
-              </p>
-
-              {!isCompleted && isOverdue(task.deadline) && (
-                <div className="mt-2 flex items-center gap-1.5 text-xs font-semibold text-red-600">
-                  <AlertCircle size={13} />
-                  Overdue
-                </div>
-              )}
-            </div>
-          ) : (
-            <div className="rounded-xl bg-slate-50 p-4">
-              <p className="text-xs text-slate-400">
-                No deadline
-              </p>
-            </div>
-          )}
-        </div>
-      </div>
-    </article>
-  );
-}
-
-function PriorityBadge({
-  priority,
-}: {
-  priority: Task["priority"];
-}) {
-  const styles = {
-    LOW: "bg-slate-100 text-slate-600",
-    MEDIUM: "bg-blue-50 text-blue-700",
-    HIGH: "bg-red-50 text-red-700",
-  };
-
-  return (
-    <span
-      className={`rounded-full px-2.5 py-1 text-[11px] font-semibold ${styles[priority]}`}
-    >
-      {priority}
-    </span>
-  );
-}
-
-function StatusBadge({
-  status,
-}: {
-  status: Task["status"];
-}) {
-  if (status === "COMPLETED") {
-    return (
-      <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 px-2.5 py-1 text-[11px] font-semibold text-emerald-700">
-        <CheckCircle2 size={12} />
-        Completed
-      </span>
-    );
-  }
-
-  if (status === "IN_PROGRESS") {
-    return (
-      <span className="inline-flex items-center gap-1.5 rounded-full bg-amber-50 px-2.5 py-1 text-[11px] font-semibold text-amber-700">
-        <Clock3 size={12} />
-        In Progress
-      </span>
-    );
-  }
-
-  return (
-    <span className="inline-flex items-center gap-1.5 rounded-full bg-slate-100 px-2.5 py-1 text-[11px] font-semibold text-slate-600">
-      <CircleDot size={12} />
-      Pending
-    </span>
-  );
-}
-
-function StatCard({
-  title,
-  value,
-  icon,
-  iconClass,
-}: {
-  title: string;
-  value: number;
-  icon: React.ReactNode;
-  iconClass: string;
-}) {
-  return (
-    <div className="rounded-2xl border border-slate-200 bg-white p-5">
-      <div className="flex items-center justify-between">
-        <div>
-          <p className="text-sm font-medium text-slate-500">
-            {title}
-          </p>
-
-          <p className="mt-2 text-2xl font-bold text-slate-900">
-            {value}
-          </p>
-        </div>
-
-        <div
-          className={`flex h-11 w-11 items-center justify-center rounded-xl ${iconClass}`}
-        >
-          {icon}
-        </div>
+        )}
       </div>
     </div>
   );
-}
-
-function formatDate(date: string) {
-  return new Date(date).toLocaleDateString("en-IN", {
-    day: "2-digit",
-    month: "short",
-    year: "numeric",
-  });
-}
-
-function isOverdue(date: string) {
-  return new Date(date).getTime() < Date.now();
 }
