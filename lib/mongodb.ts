@@ -3,12 +3,16 @@ import mongoose from "mongoose";
 const MONGODB_URI = process.env.MONGODB_URI;
 
 if (typeof MONGODB_URI !== "string" || MONGODB_URI.length === 0) {
-  throw new Error("Please define MONGODB_URI in your .env.local file");
+  throw new Error(
+    "Please define MONGODB_URI in your environment variables"
+  );
 }
 
 export async function connectDB() {
   try {
-    const connection = await mongoose.connect(MONGODB_URI);
+    const connection = await mongoose.connect(
+      MONGODB_URI as string
+    );
 
     console.log("MongoDB connected successfully");
 
