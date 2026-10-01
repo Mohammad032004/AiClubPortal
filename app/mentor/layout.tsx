@@ -1,8 +1,10 @@
 "use client";
 
+import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { signOut, useSession } from "next-auth/react";
+
 import {
   LayoutDashboard,
   UsersRound,
@@ -10,10 +12,12 @@ import {
   BookOpen,
   CheckSquare,
   FolderKanban,
+  Settings,
   LogOut,
   Menu,
   X,
 } from "lucide-react";
+
 import { useState } from "react";
 
 const navigation = [
@@ -23,10 +27,10 @@ const navigation = [
     icon: LayoutDashboard,
   },
   {
-  name: "Learning Updates",
-  href: "/mentor/learning-updates",
-  icon: BookOpenCheck,
-},
+    name: "Learning Updates",
+    href: "/mentor/learning-updates",
+    icon: BookOpenCheck,
+  },
   {
     name: "Members",
     href: "/mentor/members",
@@ -47,6 +51,11 @@ const navigation = [
     href: "/mentor/projects",
     icon: FolderKanban,
   },
+  {
+    name: "Settings",
+    href: "/mentor/settings",
+    icon: Settings,
+  },
 ];
 
 export default function MentorLayout({
@@ -60,7 +69,8 @@ export default function MentorLayout({
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
   const memberName = session?.user?.name || "Member";
-  const memberEmail = session?.user?.email || "Member Account";
+  const memberEmail =
+    session?.user?.email || "Member Account";
   const memberInitial = memberName.charAt(0).toUpperCase();
 
   return (
@@ -76,17 +86,26 @@ export default function MentorLayout({
       {/* Sidebar */}
       <aside
         className={`fixed inset-y-0 left-0 z-50 flex w-64 flex-col border-r border-slate-200 bg-white transition-transform duration-200 lg:translate-x-0 ${
-          sidebarOpen ? "translate-x-0" : "-translate-x-full"
+          sidebarOpen
+            ? "translate-x-0"
+            : "-translate-x-full"
         }`}
       >
         {/* Brand */}
         <div className="flex h-20 items-center justify-between border-b border-slate-100 px-5">
-          <div className="flex items-center gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-violet-600 to-cyan-500 text-white shadow-sm">
-              <UsersRound size={21} />
+          <div className="flex min-w-0 items-center gap-3">
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center">
+              <Image
+                src="/ai-club-logo.png"
+                alt="AI Club Logo"
+                width={40}
+                height={40}
+                className="h-10 w-10 object-contain"
+                priority
+              />
             </div>
 
-            <div>
+            <div className="min-w-0">
               <h1 className="text-base font-bold tracking-tight">
                 AI CLUB
               </h1>
@@ -101,6 +120,7 @@ export default function MentorLayout({
             type="button"
             onClick={() => setSidebarOpen(false)}
             className="rounded-lg p-2 text-slate-400 hover:bg-slate-100 lg:hidden"
+            aria-label="Close sidebar"
           >
             <X size={19} />
           </button>
@@ -180,6 +200,7 @@ export default function MentorLayout({
               type="button"
               onClick={() => setSidebarOpen(true)}
               className="rounded-lg p-2 text-slate-600 hover:bg-slate-100 lg:hidden"
+              aria-label="Open navigation"
             >
               <Menu size={21} />
             </button>
