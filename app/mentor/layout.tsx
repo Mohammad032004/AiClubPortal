@@ -6,6 +6,7 @@ import { signOut, useSession } from "next-auth/react";
 import {
   LayoutDashboard,
   UsersRound,
+  BookOpenCheck,
   BookOpen,
   CheckSquare,
   FolderKanban,
@@ -21,6 +22,11 @@ const navigation = [
     href: "/mentor/dashboard",
     icon: LayoutDashboard,
   },
+  {
+  name: "Learning Updates",
+  href: "/mentor/learning-updates",
+  icon: BookOpenCheck,
+},
   {
     name: "Members",
     href: "/mentor/members",
