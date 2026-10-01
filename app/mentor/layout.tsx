@@ -12,6 +12,7 @@ import {
   BookOpen,
   CheckSquare,
   FolderKanban,
+  Bell,
   Settings,
   LogOut,
   Menu,
@@ -52,6 +53,11 @@ const navigation = [
     icon: FolderKanban,
   },
   {
+    name: "Notifications",
+    href: "/mentor/notifications",
+    icon: Bell,
+  },
+  {
     name: "Settings",
     href: "/mentor/settings",
     icon: Settings,
@@ -71,7 +77,10 @@ export default function MentorLayout({
   const memberName = session?.user?.name || "Member";
   const memberEmail =
     session?.user?.email || "Member Account";
-  const memberInitial = memberName.charAt(0).toUpperCase();
+
+  const memberInitial = memberName
+    .charAt(0)
+    .toUpperCase();
 
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900">
@@ -152,6 +161,7 @@ export default function MentorLayout({
                   }`}
                 >
                   <Icon size={18} />
+
                   <span>{item.name}</span>
                 </Link>
               );
@@ -170,6 +180,7 @@ export default function MentorLayout({
             className="mb-3 flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium text-slate-600 transition hover:bg-red-50 hover:text-red-600"
           >
             <LogOut size={17} />
+
             <span>Logout</span>
           </button>
 

@@ -1,6 +1,5 @@
 import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
-import mongoose from "mongoose";
 
 import { authOptions } from "@/lib/auth";
 import { connectDB } from "@/lib/mongodb";
@@ -26,19 +25,18 @@ export async function GET() {
       recipient: session.user.id,
     })
       .sort({ createdAt: -1 })
+      .limit(100)
       .lean();
-
-    const unreadCount = notifications.filter(
-      (notification) => !notification.read
-    ).length;
 
     return NextResponse.json({
       success: true,
       notifications,
-      unreadCount,
     });
   } catch (error) {
-    console.error("Student notifications error:", error);
+    console.error(
+      "Student notifications GET error:",
+      error
+    );
 
     return NextResponse.json(
       {
@@ -66,15 +64,9 @@ export async function PATCH(request: Request) {
 
     const body = await request.json();
 
-    const notificationId = String(
-      body.notificationId || ""
-    ).trim();
-
-    const markAll = Boolean(body.markAll);
-
     await connectDB();
 
-    if (markAll) {
+    if (body.all === true) {
       await Notification.updateMany(
         {
           recipient: session.user.id,
@@ -93,63 +85,24 @@ export async function PATCH(request: Request) {
       });
     }
 
-    if (!notificationId) {
-      return NextResponse.json(
-        {
-          success: false,
-          message: "Notification ID is required.",
-        },
-        { status: 400 }
-      );
-    }
-
-    if (!mongoose.Types.ObjectId.isValid(notificationId)) {
-      return NextResponse.json(
-        {
-          success: false,
-          message: "Invalid notification ID.",
-        },
-        { status: 400 }
-      );
-    }
-
-    const notification = await Notification.findOneAndUpdate(
+    return NextResponse.json(
       {
-        _id: notificationId,
-        recipient: session.user.id,
+        success: false,
+        message: "Invalid notification update.",
       },
-      {
-        $set: {
-          read: true,
-        },
-      },
-      {
-        new: true,
-      }
-    ).lean();
-
-    if (!notification) {
-      return NextResponse.json(
-        {
-          success: false,
-          message: "Notification not found.",
-        },
-        { status: 404 }
-      );
-    }
-
-    return NextResponse.json({
-      success: true,
-      message: "Notification marked as read.",
-      notification,
-    });
+      { status: 400 }
+    );
   } catch (error) {
-    console.error("Update student notification error:", error);
+    console.error(
+      "Student notifications PATCH error:",
+      error
+    );
 
     return NextResponse.json(
       {
         success: false,
-        message: "Failed to update notification.",
+        message:
+          "Failed to update notifications.",
       },
       { status: 500 }
     );

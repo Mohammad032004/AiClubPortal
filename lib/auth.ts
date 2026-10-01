@@ -1,5 +1,6 @@
 import NextAuth, { NextAuthOptions } from "next-auth";
 import CredentialsProvider from "next-auth/providers/credentials";
+
 import bcrypt from "bcryptjs";
 
 import { connectDB } from "@/lib/mongodb";
@@ -71,8 +72,14 @@ export const authOptions: NextAuthOptions = {
 
     async session({ session, token }) {
       if (session.user) {
-        session.user.id = String(token.id || token.sub || "");
-        session.user.role = token.role || "STUDENT";
+        session.user.id = String(
+          token.id || token.sub || ""
+        );
+
+        session.user.role =
+          typeof token.role === "string"
+            ? token.role
+            : "STUDENT";
       }
 
       return session;

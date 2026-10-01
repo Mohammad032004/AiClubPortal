@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
-import mongoose from "mongoose";
+import { isValidObjectId } from "mongoose";
 
 import { authOptions } from "@/lib/auth";
 import { connectDB } from "@/lib/mongodb";
@@ -20,6 +20,8 @@ const notificationTypes = [
 export async function GET() {
   try {
     const session = await getServerSession(authOptions);
+
+    console.log("MENTOR NOTIFICATION SESSION:", session);
 
     if (!session?.user || session.user.role !== "MENTOR") {
       return NextResponse.json(
@@ -68,10 +70,7 @@ export async function GET() {
       notifications,
     });
   } catch (error) {
-    console.error(
-      "Mentor notifications GET error:",
-      error
-    );
+    console.error("Mentor notifications GET error:", error);
 
     return NextResponse.json(
       {
@@ -86,6 +85,8 @@ export async function GET() {
 export async function POST(request: Request) {
   try {
     const session = await getServerSession(authOptions);
+
+    console.log("MENTOR NOTIFICATION POST SESSION:", session);
 
     if (!session?.user || session.user.role !== "MENTOR") {
       return NextResponse.json(
@@ -127,8 +128,7 @@ export async function POST(request: Request) {
       return NextResponse.json(
         {
           success: false,
-          message:
-            "Please select at least one student.",
+          message: "Please select at least one student.",
         },
         { status: 400 }
       );
@@ -175,7 +175,7 @@ export async function POST(request: Request) {
     ];
 
     const invalidId = uniqueRecipientIds.some(
-      (id) => !mongoose.Types.ObjectId.isValid(id)
+      (id) => !isValidObjectId(id)
     );
 
     if (invalidId) {
@@ -190,10 +190,6 @@ export async function POST(request: Request) {
 
     await connectDB();
 
-    /*
-     * Find all students belonging to teams
-     * assigned to this mentor.
-     */
     const teams = await Team.find({
       mentor: session.user.id,
     })
@@ -208,15 +204,9 @@ export async function POST(request: Request) {
       )
     );
 
-    /*
-     * Make sure the mentor can only send
-     * notifications to their own students.
-     */
-    const unauthorizedRecipient =
-      uniqueRecipientIds.some(
-        (studentId) =>
-          !mentorStudentIds.has(studentId)
-      );
+    const unauthorizedRecipient = uniqueRecipientIds.some(
+      (studentId) => !mentorStudentIds.has(studentId)
+    );
 
     if (unauthorizedRecipient) {
       return NextResponse.json(
@@ -229,13 +219,8 @@ export async function POST(request: Request) {
       );
     }
 
-    /*
-     * Verify that all recipients are students.
-     */
     const students = await User.find({
-      _id: {
-        $in: uniqueRecipientIds,
-      },
+      _id: { $in: uniqueRecipientIds },
       role: "STUDENT",
     })
       .select("_id name email")
