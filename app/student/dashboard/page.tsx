@@ -80,7 +80,7 @@ export default function StudentDashboardPage() {
   if (loading) {
     return (
       <div className="space-y-6">
-        <div className="h-32 animate-pulse rounded-2xl bg-white" />
+        <div className="h-40 animate-pulse rounded-2xl bg-white" />
 
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           {[1, 2, 3, 4].map((item) => (
@@ -109,28 +109,44 @@ export default function StudentDashboardPage() {
   const firstName = data.student.name.split(" ")[0];
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-5 sm:space-y-6">
       {/* Welcome */}
-      <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white">
-        <div className="relative p-6 sm:p-8">
-          <div className="relative z-10">
-            <div className="mb-3 inline-flex items-center gap-2 rounded-full bg-violet-50 px-3 py-1.5 text-xs font-semibold text-violet-700">
-              <GraduationCap size={14} />
-              Student Workspace
-            </div>
+      <section className="relative isolate overflow-hidden rounded-2xl border border-slate-200 bg-white">
+        {/* Animated Background */}
+        <div className="pointer-events-none absolute inset-0 overflow-hidden">
+          <div className="absolute -left-20 -top-24 h-64 w-64 animate-[pulse_5s_ease-in-out_infinite] rounded-full bg-violet-200/60 blur-3xl" />
 
-            <h1 className="text-2xl font-bold tracking-tight text-slate-900 sm:text-3xl">
-              Welcome back, {firstName}! 👋
-            </h1>
+          <div className="absolute -right-20 -top-16 h-64 w-64 animate-[pulse_6s_ease-in-out_infinite] rounded-full bg-cyan-200/60 blur-3xl" />
 
-            <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-500">
-              Keep learning, complete your assigned tasks, and make
-              progress with your team.
-            </p>
+          <div className="absolute -bottom-32 left-1/3 h-64 w-64 animate-[pulse_7s_ease-in-out_infinite] rounded-full bg-fuchsia-100/60 blur-3xl" />
+
+          <div className="absolute inset-0 bg-[radial-gradient(circle_at_20%_20%,rgba(139,92,246,0.08),transparent_35%),radial-gradient(circle_at_80%_30%,rgba(6,182,212,0.08),transparent_35%)]" />
+        </div>
+
+        {/* Content */}
+        <div className="relative z-10 p-5 sm:p-8">
+          <div className="mb-3 inline-flex items-center gap-2 rounded-full bg-violet-50 px-3 py-1.5 text-xs font-semibold text-violet-700">
+            <GraduationCap size={14} />
+            Student Workspace
           </div>
 
-          <div className="pointer-events-none absolute -right-16 -top-20 h-56 w-56 rounded-full bg-violet-100/70 blur-3xl" />
-          <div className="pointer-events-none absolute -bottom-24 right-20 h-48 w-48 rounded-full bg-cyan-100/60 blur-3xl" />
+          <h1 className="max-w-3xl text-2xl font-bold tracking-tight text-slate-900 sm:text-3xl lg:text-4xl">
+            Welcome back,{" "}
+            <span className="bg-gradient-to-r from-violet-600 via-purple-600 to-cyan-500 bg-clip-text text-transparent">
+              {firstName}
+            </span>{" "}
+            👋
+          </h1>
+
+          <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-500 sm:text-base">
+            Keep learning, complete your assigned tasks, and make
+            progress with your team.
+          </p>
+
+          {/* Decorative line */}
+          <div className="mt-5 h-1 w-20 overflow-hidden rounded-full bg-slate-100">
+            <div className="h-full w-1/2 animate-[pulse_2s_ease-in-out_infinite] rounded-full bg-gradient-to-r from-violet-600 to-cyan-500" />
+          </div>
         </div>
       </section>
 
@@ -166,16 +182,16 @@ export default function StudentDashboardPage() {
       </section>
 
       {/* Team + Project */}
-      <section className="grid gap-6 lg:grid-cols-2">
+      <section className="grid gap-5 lg:grid-cols-2">
         {/* Team */}
-        <div className="rounded-2xl border border-slate-200 bg-white p-6">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-violet-50 text-violet-600">
+        <div className="rounded-2xl border border-slate-200 bg-white p-5 sm:p-6">
+          <div className="flex items-start justify-between gap-3">
+            <div className="flex min-w-0 items-center gap-3">
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-violet-50 text-violet-600">
                 <Users size={19} />
               </div>
 
-              <div>
+              <div className="min-w-0">
                 <h2 className="text-base font-semibold text-slate-900">
                   My Team
                 </h2>
@@ -188,7 +204,7 @@ export default function StudentDashboardPage() {
 
             <Link
               href="/student/team"
-              className="text-xs font-semibold text-violet-600 hover:text-violet-700"
+              className="shrink-0 text-xs font-semibold text-violet-600 hover:text-violet-700"
             >
               View Team
             </Link>
@@ -196,7 +212,7 @@ export default function StudentDashboardPage() {
 
           {data.team ? (
             <div className="mt-6 rounded-xl bg-slate-50 p-4">
-              <p className="text-lg font-bold text-slate-900">
+              <p className="break-words text-lg font-bold text-slate-900">
                 {data.team.name}
               </p>
 
@@ -206,7 +222,7 @@ export default function StudentDashboardPage() {
                 </span>
 
                 {data.team.mentor && (
-                  <span className="rounded-full bg-cyan-100 px-2.5 py-1 text-xs font-medium text-cyan-700">
+                  <span className="max-w-full rounded-full bg-cyan-100 px-2.5 py-1 text-xs font-medium text-cyan-700">
                     Mentor: {data.team.mentor.name}
                   </span>
                 )}
@@ -220,14 +236,14 @@ export default function StudentDashboardPage() {
         </div>
 
         {/* Current Project */}
-        <div className="rounded-2xl border border-slate-200 bg-white p-6">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-cyan-50 text-cyan-600">
+        <div className="rounded-2xl border border-slate-200 bg-white p-5 sm:p-6">
+          <div className="flex items-start justify-between gap-3">
+            <div className="flex min-w-0 items-center gap-3">
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-cyan-50 text-cyan-600">
                 <FolderKanban size={19} />
               </div>
 
-              <div>
+              <div className="min-w-0">
                 <h2 className="text-base font-semibold text-slate-900">
                   Current Project
                 </h2>
@@ -240,7 +256,7 @@ export default function StudentDashboardPage() {
 
             <Link
               href="/student/projects"
-              className="text-xs font-semibold text-violet-600 hover:text-violet-700"
+              className="shrink-0 text-xs font-semibold text-violet-600 hover:text-violet-700"
             >
               View Projects
             </Link>
@@ -252,8 +268,8 @@ export default function StudentDashboardPage() {
               className="mt-6 block rounded-xl bg-slate-50 p-4 transition hover:bg-violet-50"
             >
               <div className="flex items-start justify-between gap-4">
-                <div>
-                  <p className="font-semibold text-slate-900">
+                <div className="min-w-0">
+                  <p className="break-words font-semibold text-slate-900">
                     {data.currentProject.title}
                   </p>
 
@@ -264,7 +280,7 @@ export default function StudentDashboardPage() {
 
                 <ArrowRight
                   size={17}
-                  className="text-slate-400"
+                  className="mt-0.5 shrink-0 text-slate-400"
                 />
               </div>
 
@@ -281,7 +297,7 @@ export default function StudentDashboardPage() {
 
                 <div className="h-2 overflow-hidden rounded-full bg-slate-200">
                   <div
-                    className="h-full rounded-full bg-violet-600"
+                    className="h-full rounded-full bg-gradient-to-r from-violet-600 to-cyan-500 transition-all duration-500"
                     style={{
                       width: `${Math.min(
                         Math.max(data.currentProject.progress, 0),
@@ -352,8 +368,8 @@ function StatCard({
 }) {
   return (
     <div className="rounded-2xl border border-slate-200 bg-white p-5">
-      <div className="flex items-center justify-between">
-        <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-violet-50 text-violet-600">
+      <div className="flex items-center justify-between gap-3">
+        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-violet-50 text-violet-600">
           <Icon size={19} />
         </div>
 
