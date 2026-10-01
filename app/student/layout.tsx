@@ -11,6 +11,7 @@ import {
   ClipboardList,
   FolderKanban,
   Users,
+  Settings,
   LogOut,
 } from "lucide-react";
 
@@ -39,6 +40,12 @@ const navigation = [
     name: "My Team",
     href: "/student/team",
     icon: Users,
+    
+  },
+  {
+    name: "Settings",
+    href: "/student/settings",
+    icon: Settings,
   },
 ];
 
