@@ -140,3 +140,113 @@ export async function POST(request: Request) {
     );
   }
 }
+
+export async function PATCH(request: Request) {
+  try {
+    const session = await getServerSession(authOptions);
+
+    if (!session?.user || session.user.role !== "ADMIN") {
+      return NextResponse.json(
+        { success: false, message: "Unauthorized" },
+        { status: 401 }
+      );
+    }
+
+    const body = await request.json();
+
+    const memberId = String(body.memberId || "").trim();
+    const name = String(body.name || "").trim();
+    const email = String(body.email || "").trim().toLowerCase();
+    const password = String(body.password || "");
+
+    if (!memberId || !name || !email) {
+      return NextResponse.json(
+        {
+          success: false,
+          message: "Member ID, name and email are required.",
+        },
+        { status: 400 }
+      );
+    }
+
+    await connectDB();
+
+    const member = await User.findById(memberId);
+
+    if (!member) {
+      return NextResponse.json(
+        {
+          success: false,
+          message: "Member not found.",
+        },
+        { status: 404 }
+      );
+    }
+
+    if (member.role !== "MENTOR" && member.role !== "STUDENT") {
+      return NextResponse.json(
+        {
+          success: false,
+          message: "This account cannot be edited here.",
+        },
+        { status: 400 }
+      );
+    }
+
+    const existingUser = await User.findOne({
+      email,
+      _id: { $ne: memberId },
+    });
+
+    if (existingUser) {
+      return NextResponse.json(
+        {
+          success: false,
+          message: "A user with this email already exists.",
+        },
+        { status: 409 }
+      );
+    }
+
+    member.name = name;
+    member.email = email;
+
+    if (password) {
+      if (password.length < 6) {
+        return NextResponse.json(
+          {
+            success: false,
+            message: "Password must be at least 6 characters.",
+          },
+          { status: 400 }
+        );
+      }
+
+      member.password = await bcrypt.hash(password, 12);
+    }
+
+    await member.save();
+
+    return NextResponse.json({
+      success: true,
+      message: "Member updated successfully.",
+      member: {
+        id: member._id.toString(),
+        name: member.name,
+        email: member.email,
+        role: member.role,
+        createdAt: member.createdAt,
+      },
+    });
+  } catch (error) {
+    console.error("Update member error:", error);
+
+    return NextResponse.json(
+      {
+        success: false,
+        message: "Failed to update member",
+      },
+      { status: 500 }
+    );
+  }
+}
