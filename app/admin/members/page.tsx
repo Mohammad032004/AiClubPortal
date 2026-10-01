@@ -8,6 +8,8 @@ import {
   UserRound,
   Users,
   X,
+  Pencil,
+  LockKeyhole,
 } from "lucide-react";
 import { FormEvent, useEffect, useState } from "react";
 
@@ -23,9 +25,11 @@ type Member = {
 export default function MembersPage() {
   const [members, setMembers] = useState<Member[]>([]);
   const [showCreateForm, setShowCreateForm] = useState(false);
+  const [showEditForm, setShowEditForm] = useState(false);
 
   const [loading, setLoading] = useState(true);
   const [creating, setCreating] = useState(false);
+  const [updating, setUpdating] = useState(false);
 
   const [search, setSearch] = useState("");
   const [message, setMessage] = useState("");
@@ -38,12 +42,18 @@ export default function MembersPage() {
     role: "",
   });
 
+  const [editForm, setEditForm] = useState({
+    memberId: "",
+    name: "",
+    email: "",
+    password: "",
+  });
+
   async function fetchMembers() {
     try {
       setLoading(true);
 
       const response = await fetch("/api/admin/members");
-
       const data = await response.json();
 
       if (!response.ok) {
@@ -70,13 +80,41 @@ export default function MembersPage() {
     }));
   }
 
-  async function handleCreateMember(event: FormEvent<HTMLFormElement>) {
+  function updateEditForm(field: string, value: string) {
+    setEditForm((previous) => ({
+      ...previous,
+      [field]: value,
+    }));
+  }
+
+  function openEditModal(member: Member) {
+    setMessage("");
+    setError("");
+
+    setEditForm({
+      memberId: member._id || member.id || "",
+      name: member.name,
+      email: member.email,
+      password: "",
+    });
+
+    setShowEditForm(true);
+  }
+
+  async function handleCreateMember(
+    event: FormEvent<HTMLFormElement>
+  ) {
     event.preventDefault();
 
     setMessage("");
     setError("");
 
-    if (!form.name || !form.email || !form.password || !form.role) {
+    if (
+      !form.name ||
+      !form.email ||
+      !form.password ||
+      !form.role
+    ) {
       setError("Please fill in all fields.");
       return;
     }
@@ -95,7 +133,9 @@ export default function MembersPage() {
       const data = await response.json();
 
       if (!response.ok) {
-        throw new Error(data.message || "Failed to create member.");
+        throw new Error(
+          data.message || "Failed to create member."
+        );
       }
 
       setMessage("Member created successfully.");
@@ -120,6 +160,82 @@ export default function MembersPage() {
       );
     } finally {
       setCreating(false);
+    }
+  }
+
+  async function handleUpdateMember(
+    event: FormEvent<HTMLFormElement>
+  ) {
+    event.preventDefault();
+
+    setMessage("");
+    setError("");
+
+    if (
+      !editForm.memberId ||
+      !editForm.name ||
+      !editForm.email
+    ) {
+      setError("Name and email are required.");
+      return;
+    }
+
+    if (
+      editForm.password &&
+      editForm.password.length < 6
+    ) {
+      setError(
+        "Password must be at least 6 characters."
+      );
+      return;
+    }
+
+    try {
+      setUpdating(true);
+
+      const response = await fetch("/api/admin/members", {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          memberId: editForm.memberId,
+          name: editForm.name,
+          email: editForm.email,
+          password: editForm.password,
+        }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(
+          data.message || "Failed to update member."
+        );
+      }
+
+      setMessage("Member updated successfully.");
+
+      setEditForm({
+        memberId: "",
+        name: "",
+        email: "",
+        password: "",
+      });
+
+      setShowEditForm(false);
+
+      await fetchMembers();
+    } catch (error) {
+      console.error(error);
+
+      setError(
+        error instanceof Error
+          ? error.message
+          : "Failed to update member."
+      );
+    } finally {
+      setUpdating(false);
     }
   }
 
@@ -175,7 +291,7 @@ export default function MembersPage() {
         </div>
       )}
 
-      {error && !showCreateForm && (
+      {error && !showCreateForm && !showEditForm && (
         <div className="mb-5 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-medium text-red-700">
           {error}
         </div>
@@ -227,7 +343,9 @@ export default function MembersPage() {
             <input
               type="text"
               value={search}
-              onChange={(event) => setSearch(event.target.value)}
+              onChange={(event) =>
+                setSearch(event.target.value)
+              }
               placeholder="Search members..."
               className="w-full rounded-xl border border-slate-200 bg-slate-50 py-2.5 pl-10 pr-4 text-sm outline-none transition focus:border-violet-400 focus:ring-2 focus:ring-violet-100"
             />
@@ -270,7 +388,7 @@ export default function MembersPage() {
           </div>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[700px]">
+            <table className="w-full min-w-[850px]">
               <thead>
                 <tr className="border-b border-slate-100 bg-slate-50/70 text-left">
                   <th className="px-6 py-4 text-xs font-semibold uppercase tracking-wide text-slate-400">
@@ -287,6 +405,10 @@ export default function MembersPage() {
 
                   <th className="px-6 py-4 text-xs font-semibold uppercase tracking-wide text-slate-400">
                     Created
+                  </th>
+
+                  <th className="px-6 py-4 text-right text-xs font-semibold uppercase tracking-wide text-slate-400">
+                    Action
                   </th>
                 </tr>
               </thead>
@@ -322,7 +444,10 @@ export default function MembersPage() {
 
                     <td className="px-6 py-4">
                       <div className="flex items-center gap-2 text-sm text-slate-600">
-                        <Mail size={15} className="text-slate-400" />
+                        <Mail
+                          size={15}
+                          className="text-slate-400"
+                        />
                         {member.email}
                       </div>
                     </td>
@@ -348,6 +473,19 @@ export default function MembersPage() {
                           ).toLocaleDateString()
                         : "-"}
                     </td>
+
+                    <td className="px-6 py-4 text-right">
+                      <button
+                        type="button"
+                        onClick={() =>
+                          openEditModal(member)
+                        }
+                        className="inline-flex items-center gap-2 rounded-xl border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-600 transition hover:border-violet-200 hover:bg-violet-50 hover:text-violet-700"
+                      >
+                        <Pencil size={14} />
+                        Edit
+                      </button>
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -358,9 +496,8 @@ export default function MembersPage() {
 
       {/* Create Member Modal */}
       {showCreateForm && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/40 p-5">
+        <div className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-slate-950/40 p-5">
           <div className="w-full max-w-lg rounded-2xl bg-white shadow-2xl">
-            {/* Modal Header */}
             <div className="flex items-start justify-between border-b border-slate-100 px-6 py-5">
               <div>
                 <h2 className="text-lg font-bold text-slate-900">
@@ -374,7 +511,173 @@ export default function MembersPage() {
 
               <button
                 type="button"
-                onClick={() => setShowCreateForm(false)}
+                onClick={() =>
+                  setShowCreateForm(false)
+                }
+                className="rounded-lg p-2 text-slate-400 transition hover:bg-slate-100 hover:text-slate-700"
+              >
+                <X size={19} />
+              </button>
+            </div>
+
+            <form
+              onSubmit={handleCreateMember}
+              className="space-y-5 p-6"
+            >
+              {error && (
+                <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-medium text-red-700">
+                  {error}
+                </div>
+              )}
+
+              <div>
+                <label className="mb-2 block text-sm font-medium text-slate-700">
+                  Full Name
+                </label>
+
+                <input
+                  type="text"
+                  value={form.name}
+                  onChange={(event) =>
+                    updateForm(
+                      "name",
+                      event.target.value
+                    )
+                  }
+                  placeholder="Enter full name"
+                  className="w-full rounded-xl border border-slate-200 px-4 py-3 text-sm outline-none transition focus:border-violet-400 focus:ring-2 focus:ring-violet-100"
+                />
+              </div>
+
+              <div>
+                <label className="mb-2 block text-sm font-medium text-slate-700">
+                  Email Address
+                </label>
+
+                <div className="relative">
+                  <Mail
+                    size={17}
+                    className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"
+                  />
+
+                  <input
+                    type="email"
+                    value={form.email}
+                    onChange={(event) =>
+                      updateForm(
+                        "email",
+                        event.target.value
+                      )
+                    }
+                    placeholder="member@aiclub.com"
+                    className="w-full rounded-xl border border-slate-200 py-3 pl-10 pr-4 text-sm outline-none transition focus:border-violet-400 focus:ring-2 focus:ring-violet-100"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="mb-2 block text-sm font-medium text-slate-700">
+                  Password
+                </label>
+
+                <input
+                  type="password"
+                  value={form.password}
+                  onChange={(event) =>
+                    updateForm(
+                      "password",
+                      event.target.value
+                    )
+                  }
+                  placeholder="Create a password"
+                  className="w-full rounded-xl border border-slate-200 px-4 py-3 text-sm outline-none transition focus:border-violet-400 focus:ring-2 focus:ring-violet-100"
+                />
+
+                <p className="mt-1.5 text-xs text-slate-400">
+                  Minimum 6 characters. The password will
+                  be securely hashed.
+                </p>
+              </div>
+
+              <div>
+                <label className="mb-2 block text-sm font-medium text-slate-700">
+                  Role
+                </label>
+
+                <select
+                  value={form.role}
+                  onChange={(event) =>
+                    updateForm(
+                      "role",
+                      event.target.value
+                    )
+                  }
+                  className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm outline-none transition focus:border-violet-400 focus:ring-2 focus:ring-violet-100"
+                >
+                  <option value="" disabled>
+                    Select role
+                  </option>
+
+                  <option value="MENTOR">
+                    Mentor
+                  </option>
+
+                  <option value="STUDENT">
+                    Student
+                  </option>
+                </select>
+              </div>
+
+              <div className="flex justify-end gap-3 border-t border-slate-100 pt-5">
+                <button
+                  type="button"
+                  onClick={() =>
+                    setShowCreateForm(false)
+                  }
+                  disabled={creating}
+                  className="rounded-xl border border-slate-200 px-4 py-2.5 text-sm font-semibold text-slate-600 transition hover:bg-slate-50 disabled:opacity-50"
+                >
+                  Cancel
+                </button>
+
+                <button
+                  type="submit"
+                  disabled={creating}
+                  className="rounded-xl bg-violet-600 px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-violet-700 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  {creating
+                    ? "Creating..."
+                    : "Create Member"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Member Modal */}
+      {showEditForm && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-slate-950/40 p-5">
+          <div className="w-full max-w-lg rounded-2xl bg-white shadow-2xl">
+            {/* Header */}
+            <div className="flex items-start justify-between border-b border-slate-100 px-6 py-5">
+              <div>
+                <h2 className="text-lg font-bold text-slate-900">
+                  Edit Member
+                </h2>
+
+                <p className="mt-1 text-sm text-slate-500">
+                  Update the member account details.
+                </p>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => {
+                  if (!updating) {
+                    setShowEditForm(false);
+                  }
+                }}
                 className="rounded-lg p-2 text-slate-400 transition hover:bg-slate-100 hover:text-slate-700"
               >
                 <X size={19} />
@@ -383,10 +686,9 @@ export default function MembersPage() {
 
             {/* Form */}
             <form
-              onSubmit={handleCreateMember}
+              onSubmit={handleUpdateMember}
               className="space-y-5 p-6"
             >
-              {/* Error */}
               {error && (
                 <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-medium text-red-700">
                   {error}
@@ -401,12 +703,16 @@ export default function MembersPage() {
 
                 <input
                   type="text"
-                  value={form.name}
+                  value={editForm.name}
                   onChange={(event) =>
-                    updateForm("name", event.target.value)
+                    updateEditForm(
+                      "name",
+                      event.target.value
+                    )
                   }
                   placeholder="Enter full name"
-                  className="w-full rounded-xl border border-slate-200 px-4 py-3 text-sm outline-none transition focus:border-violet-400 focus:ring-2 focus:ring-violet-100"
+                  disabled={updating}
+                  className="w-full rounded-xl border border-slate-200 px-4 py-3 text-sm outline-none transition focus:border-violet-400 focus:ring-2 focus:ring-violet-100 disabled:bg-slate-50"
                 />
               </div>
 
@@ -424,12 +730,16 @@ export default function MembersPage() {
 
                   <input
                     type="email"
-                    value={form.email}
+                    value={editForm.email}
                     onChange={(event) =>
-                      updateForm("email", event.target.value)
+                      updateEditForm(
+                        "email",
+                        event.target.value
+                      )
                     }
                     placeholder="member@aiclub.com"
-                    className="w-full rounded-xl border border-slate-200 py-3 pl-10 pr-4 text-sm outline-none transition focus:border-violet-400 focus:ring-2 focus:ring-violet-100"
+                    disabled={updating}
+                    className="w-full rounded-xl border border-slate-200 py-3 pl-10 pr-4 text-sm outline-none transition focus:border-violet-400 focus:ring-2 focus:ring-violet-100 disabled:bg-slate-50"
                   />
                 </div>
               </div>
@@ -437,53 +747,44 @@ export default function MembersPage() {
               {/* Password */}
               <div>
                 <label className="mb-2 block text-sm font-medium text-slate-700">
-                  Password
+                  New Password
                 </label>
 
-                <input
-                  type="password"
-                  value={form.password}
-                  onChange={(event) =>
-                    updateForm("password", event.target.value)
-                  }
-                  placeholder="Create a password"
-                  className="w-full rounded-xl border border-slate-200 px-4 py-3 text-sm outline-none transition focus:border-violet-400 focus:ring-2 focus:ring-violet-100"
-                />
+                <div className="relative">
+                  <LockKeyhole
+                    size={17}
+                    className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"
+                  />
+
+                  <input
+                    type="password"
+                    value={editForm.password}
+                    onChange={(event) =>
+                      updateEditForm(
+                        "password",
+                        event.target.value
+                      )
+                    }
+                    placeholder="Leave blank to keep current password"
+                    disabled={updating}
+                    className="w-full rounded-xl border border-slate-200 py-3 pl-10 pr-4 text-sm outline-none transition focus:border-violet-400 focus:ring-2 focus:ring-violet-100 disabled:bg-slate-50"
+                  />
+                </div>
 
                 <p className="mt-1.5 text-xs text-slate-400">
-                  Minimum 6 characters. The password will be securely
-                  hashed.
+                  Enter a new password only if you want to
+                  reset it. Minimum 6 characters.
                 </p>
-              </div>
-
-              {/* Role */}
-              <div>
-                <label className="mb-2 block text-sm font-medium text-slate-700">
-                  Role
-                </label>
-
-                <select
-                  value={form.role}
-                  onChange={(event) =>
-                    updateForm("role", event.target.value)
-                  }
-                  className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm outline-none transition focus:border-violet-400 focus:ring-2 focus:ring-violet-100"
-                >
-                  <option value="" disabled>
-                    Select role
-                  </option>
-
-                  <option value="MENTOR">Mentor</option>
-                  <option value="STUDENT">Student</option>
-                </select>
               </div>
 
               {/* Actions */}
               <div className="flex justify-end gap-3 border-t border-slate-100 pt-5">
                 <button
                   type="button"
-                  onClick={() => setShowCreateForm(false)}
-                  disabled={creating}
+                  onClick={() =>
+                    setShowEditForm(false)
+                  }
+                  disabled={updating}
                   className="rounded-xl border border-slate-200 px-4 py-2.5 text-sm font-semibold text-slate-600 transition hover:bg-slate-50 disabled:opacity-50"
                 >
                   Cancel
@@ -491,10 +792,12 @@ export default function MembersPage() {
 
                 <button
                   type="submit"
-                  disabled={creating}
+                  disabled={updating}
                   className="rounded-xl bg-violet-600 px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-violet-700 disabled:cursor-not-allowed disabled:opacity-60"
                 >
-                  {creating ? "Creating..." : "Create Member"}
+                  {updating
+                    ? "Saving..."
+                    : "Save Changes"}
                 </button>
               </div>
             </form>
@@ -526,7 +829,10 @@ function StatCard({
         </div>
 
         <div>
-          <p className="text-sm text-slate-500">{title}</p>
+          <p className="text-sm text-slate-500">
+            {title}
+          </p>
+
           <p className="text-2xl font-bold text-slate-900">
             {value}
           </p>
