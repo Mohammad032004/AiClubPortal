@@ -12,6 +12,7 @@ import {
   FolderKanban,
   Users,
   Settings,
+  Bell,
   LogOut,
 } from "lucide-react";
 
@@ -40,7 +41,6 @@ const navigation = [
     name: "My Team",
     href: "/student/team",
     icon: Users,
-    
   },
   {
     name: "Settings",
@@ -66,7 +66,7 @@ export default function StudentLayout({
     <div className="min-h-screen bg-slate-50">
       {/* Sidebar */}
       <aside className="fixed inset-y-0 left-0 z-40 hidden w-64 border-r border-slate-200 bg-white lg:flex lg:flex-col">
-        {/* AI Club Logo */}
+        {/* Logo */}
         <div className="flex h-16 items-center gap-3 border-b border-slate-200 px-5">
           <div className="flex h-10 w-10 shrink-0 items-center justify-center">
             <Image
@@ -114,15 +114,15 @@ export default function StudentLayout({
                 }`}
               >
                 <Icon size={18} />
+
                 {item.name}
               </Link>
             );
           })}
         </nav>
 
-        {/* Bottom Sidebar */}
+        {/* Sidebar Bottom */}
         <div className="border-t border-slate-200 p-4">
-          {/* Logout */}
           <button
             type="button"
             onClick={() =>
@@ -133,10 +133,10 @@ export default function StudentLayout({
             className="mb-3 flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium text-slate-600 transition hover:bg-red-50 hover:text-red-600"
           >
             <LogOut size={18} />
+
             <span>Logout</span>
           </button>
 
-          {/* Student Profile */}
           <div className="flex items-center gap-3 rounded-xl bg-slate-50 p-3">
             <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-violet-100 text-sm font-bold text-violet-700">
               {studentInitial}
@@ -155,10 +155,11 @@ export default function StudentLayout({
         </div>
       </aside>
 
-      {/* Main Content */}
+      {/* Main Area */}
       <div className="lg:pl-64">
         {/* Header */}
         <header className="sticky top-0 z-30 flex h-16 items-center justify-between border-b border-slate-200 bg-white/95 px-4 backdrop-blur sm:px-6">
+          {/* Header Title */}
           <div>
             <p className="text-sm font-semibold text-slate-900">
               Student Portal
@@ -169,8 +170,21 @@ export default function StudentLayout({
             </p>
           </div>
 
-          {/* Student Profile */}
+          {/* Header Right */}
           <div className="flex items-center gap-3">
+            {/* Notifications */}
+            <Link
+              href="/student/notifications"
+              aria-label="Notifications"
+              className="relative flex h-9 w-9 items-center justify-center rounded-xl text-slate-500 transition hover:bg-slate-100 hover:text-slate-900"
+            >
+              <Bell size={19} />
+
+              {/* Unread indicator */}
+              <span className="absolute right-1.5 top-1.5 h-2 w-2 rounded-full bg-violet-600" />
+            </Link>
+
+            {/* Profile */}
             <div className="hidden text-right sm:block">
               <p className="text-sm font-semibold text-slate-800">
                 {studentName}
@@ -181,6 +195,7 @@ export default function StudentLayout({
               </p>
             </div>
 
+            {/* Avatar */}
             <div className="flex h-9 w-9 items-center justify-center rounded-full bg-violet-100 text-sm font-bold text-violet-700">
               {studentInitial}
             </div>
