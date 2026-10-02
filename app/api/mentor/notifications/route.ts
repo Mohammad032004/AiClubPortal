@@ -1,9 +1,9 @@
 import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
-import { isValidObjectId } from "mongoose";
 
 import { authOptions } from "@/lib/auth";
 import { connectDB } from "@/lib/mongodb";
+
 import Team from "@/models/Team";
 import User from "@/models/User";
 import Notification from "@/models/Notification";
@@ -16,6 +16,22 @@ const notificationTypes = [
   "TEAM",
   "SYSTEM",
 ] as const;
+
+type StudentInfo = {
+  _id: string;
+  name: string;
+  email: string;
+};
+
+type TeamStudentInfo = {
+  _id: string;
+  name: string;
+  email: string;
+};
+
+type TeamStudentId = {
+  toString(): string;
+};
 
 export async function GET() {
   try {
@@ -42,8 +58,22 @@ export async function GET() {
       .populate("students", "name email")
       .lean();
 
-    const studentIds = teams.flatMap((team) =>
-      (team.students || []).map((student) => student._id)
+    const students = teams.flatMap((team) =>
+      (team.students || []).map(
+        (student: TeamStudentInfo) => ({
+          _id: student._id,
+          name: student.name,
+          email: student.email,
+          team: {
+            _id: team._id,
+            name: team.name,
+          },
+        })
+      )
+    );
+
+    const studentIds = students.map(
+      (student: StudentInfo) => student._id
     );
 
     const notifications = await Notification.find({
@@ -56,21 +86,14 @@ export async function GET() {
 
     return NextResponse.json({
       success: true,
-      students: teams.flatMap((team) =>
-        (team.students || []).map((student) => ({
-          _id: student._id,
-          name: student.name,
-          email: student.email,
-          team: {
-            _id: team._id,
-            name: team.name,
-          },
-        }))
-      ),
+      students,
       notifications,
     });
   } catch (error) {
-    console.error("Mentor notifications GET error:", error);
+    console.error(
+      "Mentor notifications GET error:",
+      error
+    );
 
     return NextResponse.json(
       {
@@ -86,7 +109,10 @@ export async function POST(request: Request) {
   try {
     const session = await getServerSession(authOptions);
 
-    console.log("MENTOR NOTIFICATION POST SESSION:", session);
+    console.log(
+      "MENTOR NOTIFICATION POST SESSION:",
+      session
+    );
 
     if (!session?.user || session.user.role !== "MENTOR") {
       return NextResponse.json(
@@ -100,7 +126,9 @@ export async function POST(request: Request) {
 
     const body = await request.json();
 
-    const recipientIds = Array.isArray(body.recipientIds)
+    const recipientIds: unknown[] = Array.isArray(
+      body.recipientIds
+    )
       ? body.recipientIds
       : [];
 
@@ -144,11 +172,33 @@ export async function POST(request: Request) {
       );
     }
 
+    if (title.length > 120) {
+      return NextResponse.json(
+        {
+          success: false,
+          message:
+            "Notification title cannot exceed 120 characters.",
+        },
+        { status: 400 }
+      );
+    }
+
     if (!message) {
       return NextResponse.json(
         {
           success: false,
           message: "Notification message is required.",
+        },
+        { status: 400 }
+      );
+    }
+
+    if (message.length > 2000) {
+      return NextResponse.json(
+        {
+          success: false,
+          message:
+            "Notification message cannot exceed 2000 characters.",
         },
         { status: 400 }
       );
@@ -168,21 +218,31 @@ export async function POST(request: Request) {
       );
     }
 
-    const uniqueRecipientIds = [
+    /*
+     * Convert all recipient IDs to strings
+     * and remove duplicates.
+     */
+    const uniqueRecipientIds: string[] = [
       ...new Set(
         recipientIds.map((id: unknown) => String(id))
       ),
     ];
 
+    /*
+     * Validate MongoDB ObjectId format.
+     */
     const invalidId = uniqueRecipientIds.some(
-      (id) => !isValidObjectId(id)
+      (id: string) =>
+        id.length !== 24 ||
+        !/^[a-fA-F0-9]{24}$/.test(id)
     );
 
     if (invalidId) {
       return NextResponse.json(
         {
           success: false,
-          message: "One or more student IDs are invalid.",
+          message:
+            "One or more student IDs are invalid.",
         },
         { status: 400 }
       );
@@ -190,23 +250,37 @@ export async function POST(request: Request) {
 
     await connectDB();
 
+    /*
+     * Get all teams assigned to this mentor.
+     */
     const teams = await Team.find({
       mentor: session.user.id,
     })
-      .select("students")
+      .select("_id name students")
       .lean();
 
+    /*
+     * Create a set containing all students
+     * belonging to this mentor's teams.
+     */
     const mentorStudentIds = new Set(
       teams.flatMap((team) =>
-        (team.students || []).map((studentId) =>
-          studentId.toString()
+        (team.students || []).map(
+          (studentId: TeamStudentId) =>
+            studentId.toString()
         )
       )
     );
 
-    const unauthorizedRecipient = uniqueRecipientIds.some(
-      (studentId) => !mentorStudentIds.has(studentId)
-    );
+    /*
+     * Make sure the mentor can only send
+     * notifications to their assigned students.
+     */
+    const unauthorizedRecipient =
+      uniqueRecipientIds.some(
+        (studentId: string) =>
+          !mentorStudentIds.has(studentId)
+      );
 
     if (unauthorizedRecipient) {
       return NextResponse.json(
@@ -219,14 +293,22 @@ export async function POST(request: Request) {
       );
     }
 
+    /*
+     * Verify that every selected ID belongs
+     * to an actual STUDENT account.
+     */
     const students = await User.find({
-      _id: { $in: uniqueRecipientIds },
+      _id: {
+        $in: uniqueRecipientIds,
+      },
       role: "STUDENT",
     })
       .select("_id name email")
       .lean();
 
-    if (students.length !== uniqueRecipientIds.length) {
+    if (
+      students.length !== uniqueRecipientIds.length
+    ) {
       return NextResponse.json(
         {
           success: false,
@@ -237,16 +319,23 @@ export async function POST(request: Request) {
       );
     }
 
-    const notifications = await Notification.insertMany(
-      uniqueRecipientIds.map((recipientId) => ({
-        recipient: recipientId,
-        title,
-        message,
-        type,
-        read: false,
-        link,
-      }))
-    );
+    /*
+     * Create one notification for every
+     * selected student.
+     */
+    const notifications =
+      await Notification.insertMany(
+        uniqueRecipientIds.map(
+          (recipientId: string) => ({
+            recipient: recipientId,
+            title,
+            message,
+            type,
+            read: false,
+            link,
+          })
+        )
+      );
 
     return NextResponse.json(
       {
@@ -261,14 +350,15 @@ export async function POST(request: Request) {
     );
   } catch (error) {
     console.error(
-      "Mentor notification POST error:",
+      "Mentor notifications POST error:",
       error
     );
 
     return NextResponse.json(
       {
         success: false,
-        message: "Failed to send notification.",
+        message:
+          "Failed to send notification.",
       },
       { status: 500 }
     );
