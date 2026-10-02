@@ -1,36 +1,220 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# AI Club Portal
 
-## Getting Started
+A centralized learning and project management platform built for the AI Club. The portal provides separate workspaces for **Admins, Mentors, and Students**, allowing the club to manage learning resources, teams, tasks, projects, notifications, and member activities from one place.
 
-First, run the development server:
+---
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
-```
+## 🚀 Overview
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+The AI Club Portal is designed to bring the complete club workflow into a single platform.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+Instead of managing learning resources, tasks, projects, teams, and communication across multiple platforms, the portal provides a centralized workspace for club members and mentors.
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+### Main Areas
 
-## Learn More
+- 👨‍💼 Admin Management
+- 👨‍🏫 Mentor Workspace
+- 👨‍🎓 Student Workspace
+- 📚 Learning Management
+- ✅ Task Management
+- 🚀 Project Management
+- 👥 Team Management
+- 🔔 Notifications
+- 📈 Learning Updates
+- ⚙️ Account Settings
 
-To learn more about Next.js, take a look at the following resources:
+---
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## ✨ Features
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+### 👨‍💼 Admin
 
-## Deploy on Vercel
+Administrators have complete control over the portal.
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+- Manage users
+- Manage mentors
+- Manage students
+- Manage teams
+- Manage learning resources
+- Manage tasks
+- Manage projects
+- View and manage club data
+- Administrative dashboard
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+---
+
+### 👨‍🏫 Mentor
+
+Mentors can manage the students and teams assigned to them.
+
+- Mentor dashboard
+- View assigned teams
+- View team members
+- Manage learning resources
+- Assign tasks
+- Create and manage projects
+- Send notifications to students
+- View notification history
+- Manage account settings
+
+---
+
+### 👨‍🎓 Student
+
+Students get their own personalized workspace.
+
+- Student dashboard
+- Access learning resources
+- Learning updates
+- Learning journal
+- View assigned tasks
+- Track project information
+- View team members
+- Receive mentor notifications
+- Manage account settings
+
+---
+
+## 🔐 Role-Based Access
+
+The portal uses role-based authentication.
+
+There are three primary roles:
+
+| Role | Access |
+|------|--------|
+| ADMIN | Full portal management |
+| MENTOR | Assigned teams, students and learning management |
+| STUDENT | Personal learning, tasks, projects and team workspace |
+
+Users do not select their role during login. The role is retrieved from their account and used to control access.
+
+---
+
+## 🛠️ Tech Stack
+
+### Frontend
+
+- Next.js
+- React
+- TypeScript
+- Tailwind CSS
+- Lucide React
+- Next/Image
+- Next Navigation
+
+### Backend
+
+- Next.js App Router
+- Next.js Route Handlers
+- NextAuth.js
+- Node.js
+
+### Database
+
+- MongoDB
+- Mongoose
+- MongoDB Atlas
+
+### Authentication
+
+- NextAuth.js
+- Credentials Provider
+- JWT Sessions
+- bcryptjs
+
+---
+
+## 📁 Project Structure
+
+```text
+aiclubportal/
+│
+├── app/
+│   ├── admin/
+│   │   ├── dashboard/
+│   │   ├── learning/
+│   │   ├── members/
+│   │   ├── mentors/
+│   │   ├── projects/
+│   │   ├── settings/
+│   │   ├── tasks/
+│   │   ├── teams/
+│   │   └── layout.tsx
+│   │
+│   ├── api/
+│   │   ├── admin/
+│   │   │   ├── learning/
+│   │   │   ├── members/
+│   │   │   ├── projects/
+│   │   │   ├── settings/
+│   │   │   ├── tasks/
+│   │   │   └── teams/
+│   │   │
+│   │   ├── auth/
+│   │   │
+│   │   ├── mentor/
+│   │   │   ├── dashboard/
+│   │   │   ├── learning/
+│   │   │   ├── learning-updates/
+│   │   │   ├── members/
+│   │   │   ├── notifications/
+│   │   │   ├── projects/
+│   │   │   ├── settings/
+│   │   │   ├── tasks/
+│   │   │   └── teams/
+│   │   │
+│   │   └── student/
+│   │       ├── learning/
+│   │       ├── learning-updates/
+│   │       ├── notifications/
+│   │       │   └── [id]/
+│   │       └── settings/
+│   │
+│   ├── login/
+│   │
+│   ├── mentor/
+│   │   ├── dashboard/
+│   │   ├── learning/
+│   │   ├── learning-updates/
+│   │   ├── members/
+│   │   ├── notifications/
+│   │   ├── projects/
+│   │   ├── settings/
+│   │   └── tasks/
+│   │
+│   ├── student/
+│   │   ├── dashboard/
+│   │   ├── learning/
+│   │   ├── learning-journal/
+│   │   ├── notifications/
+│   │   ├── projects/
+│   │   ├── settings/
+│   │   ├── tasks/
+│   │   └── team/
+│   │
+│   ├── page.tsx
+│   ├── providers.tsx
+│   └── layout.tsx
+│
+├── lib/
+│   ├── auth.ts
+│   └── mongodb.ts
+│
+├── models/
+│   ├── User.ts
+│   ├── Team.ts
+│   ├── Task.ts
+│   ├── Project.ts
+│   ├── Learning.ts
+│   ├── LearningUpdate.ts
+│   └── Notification.ts
+│
+├── public/
+│   └── ai-club-logo.png
+│
+├── middleware.ts
+├── package.json
+├── tsconfig.json
+├── next.config.ts
+└── README.md
