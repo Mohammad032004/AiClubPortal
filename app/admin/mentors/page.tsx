@@ -1,20 +1,24 @@
+
 "use client";
 
 import {
+  AlertCircle,
+  Ban,
+  CalendarDays,
+  CheckCircle2,
+  LoaderCircle,
+  LockKeyhole,
   Mail,
+  Pencil,
+  Plus,
+  RefreshCw,
   Search,
   ShieldCheck,
+  Trash2,
+  UserCheck,
   UserRound,
   Users,
-  Plus,
-  Pencil,
-  RefreshCw,
   X,
-  LockKeyhole,
-  LoaderCircle,
-  CalendarDays,
-  AlertCircle,
-  CheckCircle2,
 } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 
@@ -25,6 +29,8 @@ type Mentor = {
   email: string;
   role: "MENTOR";
   createdAt?: string;
+  updatedAt?: string;
+  isSuspended?: boolean;
 };
 
 type MentorForm = {
@@ -33,7 +39,7 @@ type MentorForm = {
   password: string;
 };
 
-const emptyForm: MentorForm = {
+const EMPTY_FORM: MentorForm = {
   name: "",
   email: "",
   password: "",
@@ -44,6 +50,7 @@ export default function MentorsPage() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [actionId, setActionId] = useState<string | null>(null);
 
   const [search, setSearch] = useState("");
   const [error, setError] = useState("");
@@ -52,14 +59,13 @@ export default function MentorsPage() {
   const [modalOpen, setModalOpen] = useState(false);
   const [editingMentor, setEditingMentor] =
     useState<Mentor | null>(null);
-  const [form, setForm] = useState<MentorForm>(emptyForm);
-
+  const [form, setForm] = useState<MentorForm>(EMPTY_FORM);
   const [formError, setFormError] = useState("");
 
   const fetchMentors = useCallback(
-    async (showRefresh = false) => {
+    async (isRefresh = false) => {
       try {
-        if (showRefresh) {
+        if (isRefresh) {
           setRefreshing(true);
         } else {
           setLoading(true);
@@ -67,7 +73,7 @@ export default function MentorsPage() {
 
         setError("");
 
-        const response = await fetch("/api/admin/members", {
+        const response = await fetch("/api/admin/mentors", {
           method: "GET",
           cache: "no-store",
         });
@@ -80,13 +86,7 @@ export default function MentorsPage() {
           );
         }
 
-        const mentorList: Mentor[] = (
-          data.members || []
-        ).filter(
-          (member: Mentor) => member.role === "MENTOR"
-        );
-
-        setMentors(mentorList);
+        setMentors(data.mentors || []);
       } catch (err) {
         console.error("Fetch mentors error:", err);
 
@@ -116,9 +116,17 @@ export default function MentorsPage() {
     );
   });
 
+  const activeCount = mentors.filter(
+    (mentor) => !mentor.isSuspended
+  ).length;
+
+  const suspendedCount = mentors.filter(
+    (mentor) => mentor.isSuspended
+  ).length;
+
   function openCreateModal() {
     setEditingMentor(null);
-    setForm(emptyForm);
+    setForm(EMPTY_FORM);
     setFormError("");
     setError("");
     setSuccess("");
@@ -145,14 +153,11 @@ export default function MentorsPage() {
 
     setModalOpen(false);
     setEditingMentor(null);
-    setForm(emptyForm);
+    setForm(EMPTY_FORM);
     setFormError("");
   }
 
-  function updateField(
-    field: keyof MentorForm,
-    value: string
-  ) {
+  function updateField(field: keyof MentorForm, value: string) {
     setForm((current) => ({
       ...current,
       [field]: value,
@@ -179,7 +184,15 @@ export default function MentorsPage() {
       return;
     }
 
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    if (name.length > 100) {
+      setFormError("Name cannot exceed 100 characters.");
+      return;
+    }
+
+    if (
+      !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) ||
+      email.length > 254
+    ) {
       setFormError("Please enter a valid email address.");
       return;
     }
@@ -189,15 +202,19 @@ export default function MentorsPage() {
       return;
     }
 
-    if (password && password.length < 6) {
+    if (
+      password &&
+      (password.length < 6 || password.length > 128)
+    ) {
       setFormError(
-        "Password must contain at least 6 characters."
+        "Password must contain between 6 and 128 characters."
       );
       return;
     }
 
-    const mentorId =
-      editingMentor?._id || editingMentor?.id;
+    const mentorId = editingMentor
+      ? editingMentor._id || editingMentor.id
+      : undefined;
 
     if (editingMentor && !mentorId) {
       setFormError(
@@ -206,35 +223,31 @@ export default function MentorsPage() {
       return;
     }
 
+    const isEditing = Boolean(editingMentor);
+
+    const payload = isEditing
+      ? {
+          memberId: mentorId,
+          name,
+          email,
+          ...(password ? { password } : {}),
+        }
+      : {
+          name,
+          email,
+          password,
+        };
+
     try {
       setSaving(true);
 
-      const isEditing = Boolean(editingMentor);
-
-      const payload = isEditing
-        ? {
-            memberId: mentorId,
-            name,
-            email,
-            ...(password ? { password } : {}),
-          }
-        : {
-            name,
-            email,
-            password,
-            role: "MENTOR",
-          };
-
-      const response = await fetch(
-        "/api/admin/members",
-        {
-          method: isEditing ? "PATCH" : "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify(payload),
-        }
-      );
+      const response = await fetch("/api/admin/mentors", {
+        method: isEditing ? "PATCH" : "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(payload),
+      });
 
       const data = await response.json();
 
@@ -247,7 +260,7 @@ export default function MentorsPage() {
 
       setModalOpen(false);
       setEditingMentor(null);
-      setForm(emptyForm);
+      setForm(EMPTY_FORM);
       setFormError("");
 
       setSuccess(
@@ -264,10 +277,103 @@ export default function MentorsPage() {
       setFormError(
         err instanceof Error
           ? err.message
-          : "Something went wrong. Please try again."
+          : "Something went wrong."
       );
     } finally {
       setSaving(false);
+    }
+  }
+
+  async function changeMentorStatus(mentor: Mentor) {
+    const memberId = mentor._id || mentor.id;
+
+    if (!memberId || actionId) return;
+
+    const action = mentor.isSuspended ? "activate" : "suspend";
+
+    const confirmed = window.confirm(
+      action === "suspend"
+        ? `Suspend ${mentor.name}'s account? They will lose access after the server recognizes the suspension.`
+        : `Activate ${mentor.name}'s account?`
+    );
+
+    if (!confirmed) return;
+
+    setActionId(memberId);
+    setError("");
+    setSuccess("");
+
+    try {
+      const response = await fetch("/api/admin/mentors", {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          memberId,
+          action,
+        }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.message || "Unable to update status.");
+      }
+
+      setSuccess(data.message);
+      await fetchMentors(true);
+    } catch (err) {
+      setError(
+        err instanceof Error
+          ? err.message
+          : "Failed to update mentor status."
+      );
+    } finally {
+      setActionId(null);
+    }
+  }
+
+  async function deleteMentor(mentor: Mentor) {
+    const memberId = mentor._id || mentor.id;
+
+    if (!memberId || actionId) return;
+
+    const confirmed = window.confirm(
+      `Permanently delete ${mentor.name} (${mentor.email})?\n\nThis action cannot be undone.`
+    );
+
+    if (!confirmed) return;
+
+    setActionId(memberId);
+    setError("");
+    setSuccess("");
+
+    try {
+      const response = await fetch("/api/admin/mentors", {
+        method: "DELETE",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ memberId }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.message || "Failed to delete mentor.");
+      }
+
+      setSuccess(data.message);
+      await fetchMentors(true);
+    } catch (err) {
+      setError(
+        err instanceof Error
+          ? err.message
+          : "Failed to delete mentor."
+      );
+    } finally {
+      setActionId(null);
     }
   }
 
@@ -276,35 +382,30 @@ export default function MentorsPage() {
       title: "Total Mentors",
       value: mentors.length,
       icon: Users,
-      iconClass:
-        "bg-violet-50 text-violet-600",
+      iconClass: "bg-violet-50 text-violet-600",
     },
     {
-      title: "Search Results",
-      value: filteredMentors.length,
-      icon: Search,
-      iconClass:
-        "bg-cyan-50 text-cyan-600",
+      title: "Active Mentors",
+      value: activeCount,
+      icon: UserCheck,
+      iconClass: "bg-emerald-50 text-emerald-600",
     },
     {
-      title: "Mentor Accounts",
-      value: mentors.length,
-      icon: ShieldCheck,
-      iconClass:
-        "bg-emerald-50 text-emerald-600",
+      title: "Suspended Mentors",
+      value: suspendedCount,
+      icon: Ban,
+      iconClass: "bg-amber-50 text-amber-600",
     },
   ];
 
   return (
-    <div className="mx-auto max-w-[1600px] px-4 py-7 sm:px-6 lg:px-8">
-      {/* Page header */}
-      <div className="mb-7 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+    <div className="mx-auto max-w-[1600px] px-5 py-8 lg:px-8">
+      {/* Header */}
+      <div className="mb-8 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <div className="mb-2 flex items-center gap-2 text-sm text-violet-600">
+          <div className="mb-2 flex items-center gap-2 text-sm font-medium text-violet-600">
             <ShieldCheck size={17} />
-            <span className="font-semibold">
-              AI Club Administration
-            </span>
+            AI Club Administration
           </div>
 
           <h1 className="text-2xl font-bold tracking-tight text-slate-900 sm:text-3xl">
@@ -312,8 +413,7 @@ export default function MentorsPage() {
           </h1>
 
           <p className="mt-2 text-sm text-slate-500">
-            Create mentor accounts and manage existing
-            mentor details.
+            Create, edit, suspend, activate and manage mentor accounts.
           </p>
         </div>
 
@@ -331,9 +431,9 @@ export default function MentorsPage() {
       {error && (
         <div
           role="alert"
-          className="mb-5 flex items-start gap-3 rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700"
+          className="mb-5 flex items-start gap-3 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700"
         >
-          <AlertCircle size={19} className="mt-0.5 shrink-0" />
+          <AlertCircle size={18} className="mt-0.5 shrink-0" />
           <span className="flex-1">{error}</span>
           <button
             type="button"
@@ -348,21 +448,21 @@ export default function MentorsPage() {
       {success && (
         <div
           role="status"
-          className="mb-5 flex items-center gap-3 rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-700"
+          className="mb-5 flex items-center gap-3 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700"
         >
-          <CheckCircle2 size={19} />
+          <CheckCircle2 size={18} />
           <span className="flex-1">{success}</span>
           <button
             type="button"
             onClick={() => setSuccess("")}
-            aria-label="Dismiss success message"
+            aria-label="Dismiss success"
           >
             <X size={17} />
           </button>
         </div>
       )}
 
-      {/* Statistics */}
+      {/* Stats */}
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
         {stats.map((stat) => {
           const Icon = stat.icon;
@@ -372,7 +472,7 @@ export default function MentorsPage() {
               key={stat.title}
               className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm"
             >
-              <div className="flex items-center gap-4">
+              <div className="flex items-center gap-3">
                 <div
                   className={`flex h-12 w-12 items-center justify-center rounded-xl ${stat.iconClass}`}
                 >
@@ -393,15 +493,16 @@ export default function MentorsPage() {
         })}
       </div>
 
-      {/* Mentors table */}
+      {/* Mentor table */}
       <section className="mt-6 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
         <div className="flex flex-col gap-4 border-b border-slate-100 p-5 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <h2 className="font-semibold text-slate-900">
               All Mentors
             </h2>
-            <p className="mt-1 text-sm text-slate-500">
-              View and update registered mentor accounts.
+            <p className="mt-1 text-xs text-slate-400">
+              {mentors.length} mentor account
+              {mentors.length === 1 ? "" : "s"} registered
             </p>
           </div>
 
@@ -411,13 +512,10 @@ export default function MentorsPage() {
                 size={17}
                 className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"
               />
-
               <input
                 type="search"
                 value={search}
-                onChange={(event) =>
-                  setSearch(event.target.value)
-                }
+                onChange={(event) => setSearch(event.target.value)}
                 placeholder="Search name or email..."
                 aria-label="Search mentors"
                 className="w-full rounded-xl border border-slate-200 bg-slate-50 py-2.5 pl-10 pr-4 text-sm outline-none transition focus:border-violet-400 focus:ring-2 focus:ring-violet-100"
@@ -428,13 +526,11 @@ export default function MentorsPage() {
               type="button"
               onClick={() => void fetchMentors(true)}
               disabled={refreshing || loading}
-              className="inline-flex items-center justify-center gap-2 rounded-xl border border-slate-200 px-4 py-2.5 text-sm font-medium text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+              className="inline-flex items-center justify-center gap-2 rounded-xl border border-slate-200 px-4 py-2.5 text-sm font-medium text-slate-700 transition hover:bg-slate-50 disabled:opacity-50"
             >
               <RefreshCw
                 size={16}
-                className={
-                  refreshing ? "animate-spin" : ""
-                }
+                className={refreshing ? "animate-spin" : ""}
               />
               Refresh
             </button>
@@ -444,7 +540,7 @@ export default function MentorsPage() {
         {loading ? (
           <div className="flex min-h-72 flex-col items-center justify-center gap-3">
             <LoaderCircle
-              size={27}
+              size={28}
               className="animate-spin text-violet-600"
             />
             <p className="text-sm text-slate-500">
@@ -454,7 +550,7 @@ export default function MentorsPage() {
         ) : filteredMentors.length === 0 ? (
           <div className="flex min-h-72 flex-col items-center justify-center px-6 text-center">
             <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-violet-50 text-violet-600">
-              <UserRound size={27} />
+              <UserRound size={26} />
             </div>
 
             <h3 className="mt-4 font-semibold text-slate-900">
@@ -465,7 +561,7 @@ export default function MentorsPage() {
 
             <p className="mt-2 max-w-sm text-sm text-slate-500">
               {search.trim()
-                ? "Try another name or email address."
+                ? "Try a different name or email address."
                 : "Create your first mentor account to get started."}
             </p>
 
@@ -482,15 +578,16 @@ export default function MentorsPage() {
           </div>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[760px]">
+            <table className="w-full min-w-[1050px]">
               <thead>
                 <tr className="border-b border-slate-100 bg-slate-50/70 text-left">
                   {[
                     "Mentor",
                     "Email",
                     "Role",
+                    "Status",
                     "Created",
-                    "Action",
+                    "Actions",
                   ].map((heading) => (
                     <th
                       key={heading}
@@ -505,7 +602,7 @@ export default function MentorsPage() {
               <tbody className="divide-y divide-slate-100">
                 {filteredMentors.map((mentor) => {
                   const id = mentor._id || mentor.id;
-
+                  const isBusy = actionId === id;
                   const initials = mentor.name
                     .trim()
                     .split(/\s+/)
@@ -524,7 +621,6 @@ export default function MentorsPage() {
                           <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-violet-100 text-sm font-bold text-violet-700">
                             {initials || "M"}
                           </div>
-
                           <div>
                             <p className="text-sm font-semibold text-slate-900">
                               {mentor.name}
@@ -553,6 +649,27 @@ export default function MentorsPage() {
                         </span>
                       </td>
 
+                      <td className="px-5 py-4">
+                        <span
+                          className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-semibold ${
+                            mentor.isSuspended
+                              ? "bg-amber-50 text-amber-700"
+                              : "bg-emerald-50 text-emerald-700"
+                          }`}
+                        >
+                          <span
+                            className={`h-1.5 w-1.5 rounded-full ${
+                              mentor.isSuspended
+                                ? "bg-amber-500"
+                                : "bg-emerald-500"
+                            }`}
+                          />
+                          {mentor.isSuspended
+                            ? "Suspended"
+                            : "Active"}
+                        </span>
+                      </td>
+
                       <td className="px-5 py-4 text-sm text-slate-500">
                         <div className="flex items-center gap-2">
                           <CalendarDays
@@ -572,17 +689,63 @@ export default function MentorsPage() {
                       </td>
 
                       <td className="px-5 py-4">
-                        <button
-                          type="button"
-                          onClick={() =>
-                            openEditModal(mentor)
-                          }
-                          className="inline-flex items-center gap-2 rounded-lg border border-slate-200 px-3 py-2 text-sm font-semibold text-slate-700 transition hover:border-violet-200 hover:bg-violet-50 hover:text-violet-700"
-                          aria-label={`Edit ${mentor.name}`}
-                        >
-                          <Pencil size={15} />
-                          Edit
-                        </button>
+                        <div className="flex items-center gap-2">
+                          <button
+                            type="button"
+                            onClick={() => openEditModal(mentor)}
+                            disabled={Boolean(actionId)}
+                            title="Edit mentor"
+                            className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-700 transition hover:border-violet-200 hover:bg-violet-50 hover:text-violet-700 disabled:opacity-50"
+                          >
+                            <Pencil size={14} />
+                            Edit
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={() =>
+                              void changeMentorStatus(mentor)
+                            }
+                            disabled={Boolean(actionId)}
+                            title={
+                              mentor.isSuspended
+                                ? "Activate mentor"
+                                : "Suspend mentor"
+                            }
+                            className={`inline-flex items-center gap-1.5 rounded-lg border px-3 py-2 text-xs font-semibold transition disabled:opacity-50 ${
+                              mentor.isSuspended
+                                ? "border-emerald-200 text-emerald-700 hover:bg-emerald-50"
+                                : "border-amber-200 text-amber-700 hover:bg-amber-50"
+                            }`}
+                          >
+                            {isBusy ? (
+                              <LoaderCircle
+                                size={14}
+                                className="animate-spin"
+                              />
+                            ) : mentor.isSuspended ? (
+                              <UserCheck size={14} />
+                            ) : (
+                              <Ban size={14} />
+                            )}
+                            {mentor.isSuspended
+                              ? "Activate"
+                              : "Suspend"}
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={() =>
+                              void deleteMentor(mentor)
+                            }
+                            disabled={Boolean(actionId)}
+                            title="Delete mentor permanently"
+                            className="inline-flex items-center gap-1.5 rounded-lg border border-red-200 px-3 py-2 text-xs font-semibold text-red-600 transition hover:bg-red-50 disabled:opacity-50"
+                          >
+                            <Trash2 size={14} />
+                            Delete
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   );
@@ -594,8 +757,7 @@ export default function MentorsPage() {
 
         {!loading && filteredMentors.length > 0 && (
           <div className="border-t border-slate-100 px-5 py-4 text-xs text-slate-500">
-            Showing {filteredMentors.length} of{" "}
-            {mentors.length} mentors
+            Showing {filteredMentors.length} of {mentors.length} mentors
           </div>
         )}
       </section>
@@ -616,7 +778,6 @@ export default function MentorsPage() {
             aria-labelledby="mentor-modal-title"
             className="my-auto w-full max-w-lg overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl"
           >
-            {/* Modal header */}
             <div className="flex items-start justify-between border-b border-slate-100 p-5 sm:p-6">
               <div className="flex items-start gap-3">
                 <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-violet-50 text-violet-600">
@@ -636,7 +797,6 @@ export default function MentorsPage() {
                       ? "Edit Mentor"
                       : "Create New Mentor"}
                   </h2>
-
                   <p className="mt-1 text-sm text-slate-500">
                     {editingMentor
                       ? "Update the mentor's account details."
@@ -656,7 +816,6 @@ export default function MentorsPage() {
               </button>
             </div>
 
-            {/* Modal form */}
             <form onSubmit={handleSubmit}>
               <div className="space-y-5 p-5 sm:p-6">
                 {formError && (
@@ -679,19 +838,18 @@ export default function MentorsPage() {
                   >
                     Full Name
                   </label>
-
                   <input
                     id="mentor-name"
                     type="text"
                     autoComplete="name"
-                    required
                     maxLength={100}
+                    required
                     value={form.name}
                     onChange={(event) =>
                       updateField("name", event.target.value)
                     }
                     placeholder="Enter mentor's full name"
-                    className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-violet-400 focus:ring-4 focus:ring-violet-50"
+                    className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm outline-none transition placeholder:text-slate-400 focus:border-violet-400 focus:ring-4 focus:ring-violet-50"
                   />
                 </div>
 
@@ -702,27 +860,23 @@ export default function MentorsPage() {
                   >
                     Email Address
                   </label>
-
                   <div className="relative">
                     <Mail
                       size={17}
                       className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400"
                     />
-
                     <input
                       id="mentor-email"
                       type="email"
                       autoComplete="email"
                       required
+                      maxLength={254}
                       value={form.email}
                       onChange={(event) =>
-                        updateField(
-                          "email",
-                          event.target.value
-                        )
+                        updateField("email", event.target.value)
                       }
                       placeholder="mentor@example.com"
-                      className="w-full rounded-xl border border-slate-200 bg-white py-3 pl-10 pr-4 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-violet-400 focus:ring-4 focus:ring-violet-50"
+                      className="w-full rounded-xl border border-slate-200 bg-white py-3 pl-10 pr-4 text-sm outline-none transition placeholder:text-slate-400 focus:border-violet-400 focus:ring-4 focus:ring-violet-50"
                     />
                   </div>
                 </div>
@@ -736,50 +890,43 @@ export default function MentorsPage() {
                       ? "New Password (Optional)"
                       : "Initial Password"}
                   </label>
-
                   <div className="relative">
                     <LockKeyhole
                       size={17}
                       className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400"
                     />
-
                     <input
                       id="mentor-password"
                       type="password"
                       autoComplete="new-password"
                       required={!editingMentor}
                       minLength={6}
+                      maxLength={128}
                       value={form.password}
                       onChange={(event) =>
-                        updateField(
-                          "password",
-                          event.target.value
-                        )
+                        updateField("password", event.target.value)
                       }
                       placeholder={
                         editingMentor
                           ? "Leave blank to keep current password"
                           : "Minimum 6 characters"
                       }
-                      className="w-full rounded-xl border border-slate-200 bg-white py-3 pl-10 pr-4 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-violet-400 focus:ring-4 focus:ring-violet-50"
+                      className="w-full rounded-xl border border-slate-200 bg-white py-3 pl-10 pr-4 text-sm outline-none transition placeholder:text-slate-400 focus:border-violet-400 focus:ring-4 focus:ring-violet-50"
                     />
                   </div>
-
                   <p className="mt-2 text-xs leading-5 text-slate-500">
                     {editingMentor
-                      ? "The current password will remain unchanged unless you enter a new one."
-                      : "The password will be securely hashed before being stored."}
+                      ? "Leave blank to keep the existing password."
+                      : "The password will be hashed on the server before storage."}
                   </p>
                 </div>
 
-                {/* Role is intentionally fixed */}
                 <div className="rounded-xl border border-violet-100 bg-violet-50/70 p-4">
                   <div className="flex items-center gap-3">
                     <ShieldCheck
                       size={20}
                       className="text-violet-600"
                     />
-
                     <div>
                       <p className="text-sm font-semibold text-slate-800">
                         Account Role
@@ -788,7 +935,6 @@ export default function MentorsPage() {
                         Mentor — MENTOR
                       </p>
                     </div>
-
                     <span className="ml-auto rounded-full bg-white px-3 py-1 text-xs font-semibold text-violet-700">
                       Fixed
                     </span>
@@ -796,7 +942,6 @@ export default function MentorsPage() {
                 </div>
               </div>
 
-              {/* Modal footer */}
               <div className="flex flex-col-reverse gap-3 border-t border-slate-100 bg-slate-50/70 p-5 sm:flex-row sm:justify-end sm:p-6">
                 <button
                   type="button"
@@ -827,7 +972,6 @@ export default function MentorsPage() {
                       ) : (
                         <Plus size={18} />
                       )}
-
                       {editingMentor
                         ? "Save Changes"
                         : "Create Mentor"}
