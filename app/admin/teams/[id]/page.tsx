@@ -1,6 +1,7 @@
+
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
 import {
@@ -11,9 +12,9 @@ import {
   FolderKanban,
   CheckCircle2,
   Clock3,
-  CircleDot,
   X,
   Save,
+  Pencil,
 } from "lucide-react";
 
 type Member = {
@@ -21,6 +22,7 @@ type Member = {
   name: string;
   email: string;
   role: string;
+  isSuspended?: boolean;
 };
 
 type Team = {
@@ -29,126 +31,129 @@ type Team = {
   status: "ACTIVE" | "COMPLETED" | "PENDING";
   mentor: Member;
   students: Member[];
-  createdAt: string;
+  createdAt?: string;
 };
 
+type ApiResponse = {
+  success?: boolean;
+  message?: string;
+  team?: Team;
+  mentors?: Member[];
+  members?: Member[];
+  [key: string]: unknown;
+};
+
+async function readResponse(
+  response: Response,
+  label: string
+): Promise<ApiResponse> {
+  const text = await response.text();
+
+  if (!text) {
+    throw new Error(
+      `${label} returned an empty response (${response.status}).`
+    );
+  }
+
+  let data: ApiResponse;
+
+  try {
+    data = JSON.parse(text) as ApiResponse;
+  } catch {
+    console.error(`${label} returned invalid JSON:`, text);
+    throw new Error(`${label} returned invalid JSON.`);
+  }
+
+  if (!response.ok || data.success === false) {
+    console.error(`${label} failed:`, {
+      status: response.status,
+      response: data,
+    });
+
+    throw new Error(
+      data.message || `${label} failed with status ${response.status}.`
+    );
+  }
+
+  return data;
+}
+
 export default function TeamDetailsPage() {
-  const params = useParams();
+  const params = useParams<{ id: string }>();
+  const teamId = params.id;
 
   const [team, setTeam] = useState<Team | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
-  // Edit modal
   const [isEditOpen, setIsEditOpen] = useState(false);
-
   const [editName, setEditName] = useState("");
   const [editStatus, setEditStatus] =
     useState<Team["status"]>("ACTIVE");
 
   const [mentors, setMentors] = useState<Member[]>([]);
   const [students, setStudents] = useState<Member[]>([]);
-
   const [editMentor, setEditMentor] = useState("");
   const [editStudents, setEditStudents] = useState<string[]>([]);
 
   const [membersLoading, setMembersLoading] = useState(false);
-
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState("");
   const [saveSuccess, setSaveSuccess] = useState("");
 
-  // --------------------------------------------------
-  // Load Team
-  // --------------------------------------------------
+  async function loadTeam() {
+    try {
+      setLoading(true);
+      setError("");
+
+      const response = await fetch(`/api/admin/teams/${teamId}`, {
+        cache: "no-store",
+      });
+
+      const data = await readResponse(response, "Load team API");
+
+      if (!data.team) {
+        throw new Error("The API did not return a team.");
+      }
+
+      setTeam(data.team);
+    } catch (err) {
+      console.error("Load team error:", err);
+      setError(
+        err instanceof Error
+          ? err.message
+          : "Failed to load team details."
+      );
+    } finally {
+      setLoading(false);
+    }
+  }
 
   useEffect(() => {
-    async function loadTeam() {
-      try {
-        setLoading(true);
-        setError("");
-
-        const response = await fetch(
-          `/api/admin/teams/${params.id}`
-        );
-
-        const text = await response.text();
-
-        if (!response.ok) {
-          throw new Error(
-            `Failed to load team (${response.status})`
-          );
-        }
-
-        if (!text) {
-          throw new Error(
-            "Server returned an empty response."
-          );
-        }
-
-        const data = JSON.parse(text);
-
-        if (!data.success) {
-          throw new Error(
-            data.message || "Failed to load team."
-          );
-        }
-
-        if (!data.team) {
-          throw new Error("Team not found.");
-        }
-
-        setTeam(data.team);
-      } catch (err) {
-        console.error("Team details error:", err);
-
-        setError(
-          err instanceof Error
-            ? err.message
-            : "Failed to load team details."
-        );
-      } finally {
-        setLoading(false);
-      }
+    if (teamId) {
+      void loadTeam();
     }
+  }, [teamId]);
 
-    if (params.id) {
-      loadTeam();
-    }
-  }, [params.id]);
-
-  // --------------------------------------------------
-  // Status Styles
-  // --------------------------------------------------
-
-  const getStatusStyles = (status: Team["status"]) => {
+  function statusClass(status: Team["status"]) {
     switch (status) {
       case "ACTIVE":
-        return "bg-emerald-50 text-emerald-700 border-emerald-200";
-
+        return "border-emerald-200 bg-emerald-50 text-emerald-700";
       case "COMPLETED":
-        return "bg-blue-50 text-blue-700 border-blue-200";
-
-      case "PENDING":
-        return "bg-amber-50 text-amber-700 border-amber-200";
-
+        return "border-blue-200 bg-blue-50 text-blue-700";
       default:
-        return "bg-slate-50 text-slate-700 border-slate-200";
+        return "border-amber-200 bg-amber-50 text-amber-700";
     }
-  };
+  }
 
-  // --------------------------------------------------
-  // Open Edit Modal
-  // --------------------------------------------------
-
-  const openEditModal = async () => {
+  async function openEditModal() {
     if (!team) return;
 
     setEditName(team.name);
     setEditStatus(team.status);
     setEditMentor(team.mentor?._id || "");
     setEditStudents(
-      team.students.map((student) => student._id)
+      (team.students || []).map((student) => student._id)
     );
 
     setSaveError("");
@@ -158,58 +163,85 @@ export default function TeamDetailsPage() {
     try {
       setMembersLoading(true);
 
-      const response = await fetch("/api/admin/members");
+      const [mentorsResponse, membersResponse] = await Promise.all([
+        fetch("/api/admin/mentors", { cache: "no-store" }),
+        fetch("/api/admin/members", { cache: "no-store" }),
+      ]);
 
-      const data = await response.json();
+      const [mentorsData, membersData] = await Promise.all([
+        readResponse(mentorsResponse, "Load mentors API"),
+        readResponse(membersResponse, "Load members API"),
+      ]);
 
-      if (!response.ok || !data.success) {
-        throw new Error(
-          data.message || "Failed to load members."
-        );
-      }
+      const currentMentorId = team.mentor?._id;
 
-      setMentors(
-        data.members.filter(
-          (member: Member) => member.role === "MENTOR"
-        )
+      const currentStudentIds = new Set(
+        (team.students || []).map((student) => student._id)
       );
 
-      setStudents(
-        data.members.filter(
-          (member: Member) => member.role === "STUDENT"
-        )
+      const mentorRecords = (mentorsData.mentors || []).filter(
+        (mentor) =>
+          mentor.role === "MENTOR" &&
+          Boolean(mentor._id) &&
+          (!mentor.isSuspended || mentor._id === currentMentorId)
       );
+
+      const uniqueMentors = Array.from(
+        new Map(
+          mentorRecords.map((mentor) => [mentor._id, mentor])
+        ).values()
+      );
+
+      const studentRecords = (membersData.members || []).filter(
+        (student) =>
+          student.role === "STUDENT" &&
+          Boolean(student._id) &&
+          (!student.isSuspended ||
+            currentStudentIds.has(student._id))
+      );
+
+      const uniqueStudents = Array.from(
+        new Map(
+          studentRecords.map((student) => [student._id, student])
+        ).values()
+      );
+
+      setMentors(uniqueMentors);
+      setStudents(uniqueStudents);
     } catch (err) {
-      console.error("Load members error:", err);
+      console.error("Load team assignments error:", err);
 
       setSaveError(
         err instanceof Error
           ? err.message
-          : "Failed to load members."
+          : "Failed to load mentors and students."
       );
     } finally {
       setMembersLoading(false);
     }
-  };
+  }
 
-  // --------------------------------------------------
-  // Close Edit Modal
-  // --------------------------------------------------
-
-  const closeEditModal = () => {
+  function closeEditModal() {
     if (saving) return;
 
     setIsEditOpen(false);
     setSaveError("");
     setSaveSuccess("");
-  };
+  }
 
-  // --------------------------------------------------
-  // Update Team
-  // --------------------------------------------------
+  function toggleStudent(studentId: string) {
+    setEditStudents((previous) =>
+      previous.includes(studentId)
+        ? previous.filter((id) => id !== studentId)
+        : [...previous, studentId]
+    );
+  }
 
-  const handleUpdateTeam = async () => {
+  async function handleUpdateTeam() {
     if (!team) return;
+
+    setSaveError("");
+    setSaveSuccess("");
 
     if (!editName.trim()) {
       setSaveError("Team name is required.");
@@ -222,65 +254,38 @@ export default function TeamDetailsPage() {
     }
 
     if (editStudents.length === 0) {
-      setSaveError(
-        "Please select at least one student."
-      );
+      setSaveError("Please select at least one student.");
       return;
     }
 
     try {
       setSaving(true);
-      setSaveError("");
-      setSaveSuccess("");
 
-      const response = await fetch(
-        `/api/admin/teams/${team._id}`,
-        {
-          method: "PATCH",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            name: editName.trim(),
-            status: editStatus,
-            mentorId: editMentor,
-            studentIds: editStudents,
-          }),
-        }
-      );
+      const response = await fetch(`/api/admin/teams/${teamId}`, {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          name: editName.trim(),
+          status: editStatus,
+          mentorId: editMentor,
+          studentIds: editStudents,
+        }),
+      });
 
-      const text = await response.text();
+      const data = await readResponse(response, "Update team API");
 
-      if (!response.ok) {
-        throw new Error(
-          `Failed to update team (${response.status})`
-        );
+      // Some APIs return only success/message rather than the updated team.
+      // In that case, reload the team using the GET endpoint.
+      if (data.team) {
+        setTeam(data.team);
+      } else {
+        await loadTeam();
       }
 
-      if (!text) {
-        throw new Error(
-          "Server returned an empty response."
-        );
-      }
-
-      const data = JSON.parse(text);
-
-      if (!data.success) {
-        throw new Error(
-          data.message || "Failed to update team."
-        );
-      }
-
-      setTeam(data.team);
-
-      setSaveSuccess(
-        "Team updated successfully."
-      );
-
-      setTimeout(() => {
-        setIsEditOpen(false);
-        setSaveSuccess("");
-      }, 800);
+      setSaveSuccess(data.message || "Team updated successfully.");
+      setIsEditOpen(false);
     } catch (err) {
       console.error("Update team error:", err);
 
@@ -292,435 +297,241 @@ export default function TeamDetailsPage() {
     } finally {
       setSaving(false);
     }
-  };
-
-  // --------------------------------------------------
-  // Loading
-  // --------------------------------------------------
+  }
 
   if (loading) {
     return (
-      <div className="space-y-6">
-        <div className="h-8 w-40 animate-pulse rounded-lg bg-slate-100" />
-
-        <div className="h-40 animate-pulse rounded-2xl border border-slate-200 bg-white" />
-
-        <div className="grid gap-6 lg:grid-cols-3">
-          <div className="h-64 animate-pulse rounded-2xl border border-slate-200 bg-white lg:col-span-2" />
-
-          <div className="h-64 animate-pulse rounded-2xl border border-slate-200 bg-white" />
-        </div>
+      <div className="flex min-h-[50vh] items-center justify-center text-sm text-slate-500">
+        Loading team details...
       </div>
     );
   }
-
-  // --------------------------------------------------
-  // Error
-  // --------------------------------------------------
 
   if (error || !team) {
     return (
-      <div className="space-y-6">
+      <div className="mx-auto max-w-4xl px-5 py-10">
         <Link
           href="/admin/teams"
-          className="inline-flex items-center gap-2 text-sm font-medium text-slate-600 transition hover:text-violet-600"
+          className="mb-6 inline-flex items-center gap-2 text-sm font-medium text-violet-700 hover:text-violet-900"
         >
-          <ArrowLeft className="h-4 w-4" />
+          <ArrowLeft size={16} />
           Back to Teams
         </Link>
 
-        <div className="rounded-2xl border border-red-200 bg-red-50 p-6">
-          <h2 className="text-lg font-semibold text-red-800">
-            Unable to load team
-          </h2>
+        <div className="rounded-xl border border-red-200 bg-red-50 p-5 text-sm text-red-700">
+          {error || "Team not found."}
 
-          <p className="mt-1 text-sm text-red-600">
-            {error || "Team not found."}
-          </p>
+          <button
+            type="button"
+            onClick={() => void loadTeam()}
+            className="ml-3 font-semibold underline"
+          >
+            Retry
+          </button>
         </div>
       </div>
     );
   }
 
-  // --------------------------------------------------
-  // Main UI
-  // --------------------------------------------------
-
   return (
-    <div className="space-y-6">
-
-      {/* Back */}
+    <div className="mx-auto max-w-[1400px] px-5 py-8 lg:px-8">
       <Link
         href="/admin/teams"
-        className="inline-flex items-center gap-2 text-sm font-medium text-slate-600 transition hover:text-violet-600"
+        className="mb-6 inline-flex items-center gap-2 text-sm font-medium text-slate-500 transition hover:text-violet-700"
       >
-        <ArrowLeft className="h-4 w-4" />
+        <ArrowLeft size={17} />
         Back to Teams
       </Link>
 
-      {/* Header */}
-      <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-        <div className="flex flex-col justify-between gap-5 md:flex-row md:items-center">
-
-          <div>
-            <div className="mb-3 flex items-center gap-3">
-
-              <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-violet-100">
-                <Users className="h-6 w-6 text-violet-600" />
-              </div>
-
-              <div>
-                <h1 className="text-2xl font-bold tracking-tight text-slate-900">
-                  {team.name}
-                </h1>
-
-                <p className="text-sm text-slate-500">
-                  Team ID: {team._id}
-                </p>
-              </div>
-
-            </div>
-          </div>
-
-          <div className="flex items-center gap-3">
+      <div className="mb-8 flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+        <div>
+          <div className="mb-3 flex flex-wrap items-center gap-3">
+            <h1 className="text-3xl font-bold tracking-tight text-slate-900">
+              {team.name}
+            </h1>
 
             <span
-              className={`inline-flex w-fit items-center gap-2 rounded-full border px-3 py-1.5 text-sm font-medium ${getStatusStyles(
-                team.status
-              )}`}
+              className={`rounded-full border px-3 py-1 text-xs font-semibold ${statusClass(team.status)}`}
             >
-              <CircleDot className="h-3.5 w-3.5" />
               {team.status}
             </span>
-
-            <button
-              type="button"
-              onClick={openEditModal}
-              className="rounded-xl bg-violet-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-violet-700"
-            >
-              Edit Team
-            </button>
-
           </div>
+
+          <p className="text-sm text-slate-500">
+            Manage this team, its mentor, and its student assignments.
+          </p>
+
+          <p className="mt-2 break-all text-xs text-slate-400">
+            Team ID: {team._id}
+          </p>
         </div>
+
+        <button
+          type="button"
+          onClick={() => void openEditModal()}
+          className="inline-flex w-fit items-center gap-2 rounded-xl bg-violet-600 px-4 py-3 text-sm font-semibold text-white transition hover:bg-violet-700"
+        >
+          <Pencil size={16} />
+          Edit Team
+        </button>
       </div>
 
-      {/* Overview */}
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-
-        {/* Members */}
-        <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-          <div className="flex items-center gap-3">
-
-            <div className="rounded-lg bg-violet-50 p-2">
-              <Users className="h-5 w-5 text-violet-600" />
-            </div>
-
-            <div>
-              <p className="text-sm text-slate-500">
-                Team Members
-              </p>
-
-              <p className="text-xl font-bold text-slate-900">
-                {team.students.length}
-              </p>
-            </div>
-
-          </div>
+      {saveSuccess && !isEditOpen && (
+        <div className="mb-5 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">
+          {saveSuccess}
         </div>
+      )}
 
-        {/* Mentor */}
-        <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-          <div className="flex items-center gap-3">
+      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+        <InfoCard
+          icon={<Users size={21} />}
+          label="Total Students"
+          value={String(team.students?.length || 0)}
+          color="bg-violet-50 text-violet-600"
+        />
 
-            <div className="rounded-lg bg-cyan-50 p-2">
-              <UserRound className="h-5 w-5 text-cyan-600" />
-            </div>
+        <InfoCard
+          icon={<UserRound size={21} />}
+          label="Assigned Mentor"
+          value={team.mentor?.name || "Not assigned"}
+          color="bg-cyan-50 text-cyan-600"
+        />
 
-            <div>
-              <p className="text-sm text-slate-500">
-                Mentor
-              </p>
-
-              <p className="text-base font-bold text-slate-900">
-                {team.mentor?.name || "Not assigned"}
-              </p>
-            </div>
-
-          </div>
-        </div>
-
-        {/* Status */}
-        <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-          <div className="flex items-center gap-3">
-
-            <div className="rounded-lg bg-amber-50 p-2">
-              <Clock3 className="h-5 w-5 text-amber-600" />
-            </div>
-
-            <div>
-              <p className="text-sm text-slate-500">
-                Status
-              </p>
-
-              <p className="text-base font-bold text-slate-900">
-                {team.status}
-              </p>
-            </div>
-
-          </div>
-        </div>
-
-        {/* Projects */}
-        <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-          <div className="flex items-center gap-3">
-
-            <div className="rounded-lg bg-emerald-50 p-2">
-              <CheckCircle2 className="h-5 w-5 text-emerald-600" />
-            </div>
-
-            <div>
-              <p className="text-sm text-slate-500">
-                Projects
-              </p>
-
-              <p className="text-xl font-bold text-slate-900">
-                0
-              </p>
-            </div>
-
-          </div>
-        </div>
-
-      </div>
-
-      {/* Main Content */}
-      <div className="grid gap-6 lg:grid-cols-3">
-
-        {/* Students */}
-        <div className="rounded-2xl border border-slate-200 bg-white shadow-sm lg:col-span-2">
-
-          <div className="border-b border-slate-100 px-6 py-5">
-
-            <div className="flex items-center justify-between">
-
-              <div>
-                <h2 className="text-lg font-semibold text-slate-900">
-                  Team Members
-                </h2>
-
-                <p className="mt-1 text-sm text-slate-500">
-                  Students assigned to this team
-                </p>
-              </div>
-
-              <span className="rounded-full bg-violet-50 px-3 py-1 text-sm font-medium text-violet-700">
-                {team.students.length} Students
-              </span>
-
-            </div>
-
-          </div>
-
-          <div className="divide-y divide-slate-100">
-
-            {team.students.length > 0 ? (
-              team.students.map((student) => (
-
-                <div
-                  key={student._id}
-                  className="flex items-center justify-between gap-4 px-6 py-4"
-                >
-
-                  <div className="flex min-w-0 items-center gap-3">
-
-                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-violet-100 text-sm font-semibold text-violet-700">
-                      {student.name.charAt(0).toUpperCase()}
-                    </div>
-
-                    <div className="min-w-0">
-
-                      <p className="truncate font-medium text-slate-900">
-                        {student.name}
-                      </p>
-
-                      <div className="mt-1 flex items-center gap-1.5 text-xs text-slate-500">
-
-                        <Mail className="h-3.5 w-3.5" />
-
-                        <span className="truncate">
-                          {student.email}
-                        </span>
-
-                      </div>
-
-                    </div>
-
-                  </div>
-
-                  <span className="hidden rounded-full bg-slate-100 px-2.5 py-1 text-xs font-medium text-slate-600 sm:inline-flex">
-                    STUDENT
-                  </span>
-
-                </div>
-
-              ))
+        <InfoCard
+          icon={
+            team.status === "ACTIVE" ? (
+              <CheckCircle2 size={21} />
+            ) : team.status === "COMPLETED" ? (
+              <FolderKanban size={21} />
             ) : (
+              <Clock3 size={21} />
+            )
+          }
+          label="Team Status"
+          value={team.status}
+          color="bg-emerald-50 text-emerald-600"
+        />
+      </div>
 
-              <div className="px-6 py-10 text-center">
+      <div className="mt-6 grid gap-6 lg:grid-cols-3">
+        {/* Mentor details */}
+        <section className="rounded-2xl border border-slate-200 bg-white p-6">
+          <div className="mb-5 flex items-center gap-3">
+            <div className="rounded-xl bg-cyan-50 p-3 text-cyan-700">
+              <UserRound size={22} />
+            </div>
 
-                <Users className="mx-auto h-8 w-8 text-slate-300" />
+            <div>
+              <h2 className="font-semibold text-slate-900">
+                Team Mentor
+              </h2>
+              <p className="text-xs text-slate-500">
+                Assigned mentor details
+              </p>
+            </div>
+          </div>
 
-                <p className="mt-2 text-sm text-slate-500">
-                  No students assigned to this team.
-                </p>
-
+          {team.mentor ? (
+            <>
+              <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-violet-100 text-lg font-bold text-violet-700">
+                {team.mentor.name
+                  .split(" ")
+                  .map((part) => part[0])
+                  .join("")
+                  .slice(0, 2)
+                  .toUpperCase()}
               </div>
 
-            )}
+              <h3 className="mt-4 font-semibold text-slate-900">
+                {team.mentor.name}
+              </h3>
 
-          </div>
+              <p className="mt-1 break-all text-sm text-slate-500">
+                {team.mentor.email}
+              </p>
 
-        </div>
-
-        {/* Mentor */}
-        <div className="rounded-2xl border border-slate-200 bg-white shadow-sm">
-
-          <div className="border-b border-slate-100 px-6 py-5">
-
-            <h2 className="text-lg font-semibold text-slate-900">
-              Assigned Mentor
-            </h2>
-
-            <p className="mt-1 text-sm text-slate-500">
-              Mentor responsible for this team
+              <span className="mt-4 inline-flex rounded-full bg-cyan-50 px-3 py-1 text-xs font-semibold text-cyan-700">
+                MENTOR
+              </span>
+            </>
+          ) : (
+            <p className="text-sm text-slate-500">
+              No mentor assigned.
             </p>
+          )}
+        </section>
 
+        {/* Student list */}
+        <section className="rounded-2xl border border-slate-200 bg-white lg:col-span-2">
+          <div className="flex items-center justify-between border-b border-slate-100 p-6">
+            <div>
+              <h2 className="font-semibold text-slate-900">
+                Team Students
+              </h2>
+
+              <p className="mt-1 text-xs text-slate-500">
+                Students currently assigned to this team.
+              </p>
+            </div>
+
+            <span className="rounded-lg bg-violet-50 px-3 py-1.5 text-xs font-semibold text-violet-700">
+              {team.students?.length || 0} students
+            </span>
           </div>
 
-          <div className="p-6">
-
-            {team.mentor ? (
-              <>
-
-                <div className="flex items-center gap-4">
-
-                  <div className="flex h-14 w-14 items-center justify-center rounded-full bg-cyan-100 text-lg font-bold text-cyan-700">
-                    {team.mentor.name.charAt(0).toUpperCase()}
+          {!team.students?.length ? (
+            <div className="p-10 text-center text-sm text-slate-500">
+              No students assigned to this team.
+            </div>
+          ) : (
+            <div className="divide-y divide-slate-100">
+              {team.students.map((student, index) => (
+                <div
+                  key={student._id || `student-${index}`}
+                  className="flex items-center gap-3 px-6 py-4"
+                >
+                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-slate-100 text-sm font-bold text-slate-600">
+                    {student.name
+                      .split(" ")
+                      .map((part) => part[0])
+                      .join("")
+                      .slice(0, 2)
+                      .toUpperCase()}
                   </div>
 
-                  <div className="min-w-0">
-
-                    <h3 className="font-semibold text-slate-900">
-                      {team.mentor.name}
-                    </h3>
-
-                    <p className="mt-1 text-sm text-slate-500">
-                      Mentor
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-sm font-semibold text-slate-900">
+                      {student.name}
                     </p>
 
+                    <p className="mt-1 flex items-center gap-1.5 break-all text-xs text-slate-500">
+                      <Mail size={13} className="shrink-0" />
+                      {student.email}
+                    </p>
                   </div>
 
+                  <span className="hidden rounded-full bg-slate-100 px-2.5 py-1 text-xs text-slate-600 sm:inline-flex">
+                    STUDENT
+                  </span>
                 </div>
-
-                <div className="mt-6 rounded-xl bg-slate-50 p-4">
-
-                  <div className="flex items-center gap-2 text-sm text-slate-600">
-
-                    <Mail className="h-4 w-4" />
-
-                    <span className="break-all">
-                      {team.mentor.email}
-                    </span>
-
-                  </div>
-
-                </div>
-
-              </>
-            ) : (
-
-              <p className="text-sm text-slate-500">
-                No mentor assigned.
-              </p>
-
-            )}
-
-          </div>
-
-        </div>
-
+              ))}
+            </div>
+          )}
+        </section>
       </div>
 
-      {/* Modules */}
-      <div className="grid gap-6 md:grid-cols-3">
-
-        <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-
-          <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-violet-50">
-            <CircleDot className="h-5 w-5 text-violet-600" />
-          </div>
-
-          <h3 className="mt-4 font-semibold text-slate-900">
-            Learning
-          </h3>
-
-          <p className="mt-1 text-sm text-slate-500">
-            Track learning resources, completion and mentor reviews.
-          </p>
-
-        </div>
-
-        <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-
-          <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-cyan-50">
-            <CheckCircle2 className="h-5 w-5 text-cyan-600" />
-          </div>
-
-          <h3 className="mt-4 font-semibold text-slate-900">
-            Tasks
-          </h3>
-
-          <p className="mt-1 text-sm text-slate-500">
-            View assignments, submissions and mentor feedback.
-          </p>
-
-        </div>
-
-        <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-
-          <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-emerald-50">
-            <FolderKanban className="h-5 w-5 text-emerald-600" />
-          </div>
-
-          <h3 className="mt-4 font-semibold text-slate-900">
-            Project
-          </h3>
-
-          <p className="mt-1 text-sm text-slate-500">
-            Manage the team's project, milestones and progress.
-          </p>
-
-        </div>
-
-      </div>
-
-      {/* Edit Team Modal */}
+      {/* Edit team modal */}
       {isEditOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/40 p-4">
-
-          <div className="w-full max-w-lg rounded-2xl border border-slate-200 bg-white shadow-xl">
-
-            {/* Modal Header */}
-            <div className="flex items-center justify-between border-b border-slate-100 px-6 py-5">
-
+          <div className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-2xl bg-white shadow-2xl">
+            <div className="sticky top-0 flex items-start justify-between border-b border-slate-100 bg-white px-6 py-5">
               <div>
-                <h2 className="text-lg font-semibold text-slate-900">
+                <h2 className="text-lg font-bold text-slate-900">
                   Edit Team
                 </h2>
 
                 <p className="mt-1 text-sm text-slate-500">
-                  Update the team's information and members.
+                  Update the team details and assignments.
                 </p>
               </div>
 
@@ -728,70 +539,82 @@ export default function TeamDetailsPage() {
                 type="button"
                 onClick={closeEditModal}
                 disabled={saving}
-                className="rounded-lg p-2 text-slate-400 transition hover:bg-slate-100 hover:text-slate-600 disabled:cursor-not-allowed disabled:opacity-50"
+                aria-label="Close edit team form"
+                className="rounded-lg p-2 text-slate-400 hover:bg-slate-100 disabled:opacity-50"
               >
-                <X className="h-5 w-5" />
+                <X size={19} />
               </button>
-
             </div>
 
-            {/* Modal Body */}
-            <div className="max-h-[70vh] space-y-5 overflow-y-auto px-6 py-6">
-
-              {/* Error */}
+            <div className="space-y-5 p-6">
               {saveError && (
-                <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-600">
+                <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
                   {saveError}
                 </div>
               )}
 
-              {/* Success */}
               {saveSuccess && (
                 <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">
                   {saveSuccess}
                 </div>
               )}
 
-              {/* Team Name */}
               <div>
-
-                <label className="mb-2 block text-sm font-medium text-slate-700">
+                <label
+                  htmlFor="edit-team-name"
+                  className="mb-2 block text-sm font-medium text-slate-700"
+                >
                   Team Name
                 </label>
 
                 <input
-                  type="text"
+                  id="edit-team-name"
                   value={editName}
-                  onChange={(e) =>
-                    setEditName(e.target.value)
-                  }
-                  placeholder="Enter team name"
-                  className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-violet-500 focus:ring-2 focus:ring-violet-100"
+                  onChange={(event) => setEditName(event.target.value)}
+                  disabled={saving}
+                  className="w-full rounded-xl border border-slate-200 px-4 py-3 text-sm outline-none focus:border-violet-400"
                 />
-
               </div>
 
-              {/* Mentor */}
               <div>
-
-                <label className="mb-2 block text-sm font-medium text-slate-700">
-                  Mentor
+                <label
+                  htmlFor="edit-team-status"
+                  className="mb-2 block text-sm font-medium text-slate-700"
+                >
+                  Team Status
                 </label>
 
                 <select
-                  value={editMentor}
-                  onChange={(e) =>
-                    setEditMentor(e.target.value)
+                  id="edit-team-status"
+                  value={editStatus}
+                  onChange={(event) =>
+                    setEditStatus(event.target.value as Team["status"])
                   }
-                  disabled={membersLoading}
-                  className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-violet-500 focus:ring-2 focus:ring-violet-100 disabled:bg-slate-50"
+                  disabled={saving}
+                  className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm outline-none focus:border-violet-400"
                 >
+                  <option value="ACTIVE">Active</option>
+                  <option value="PENDING">Pending</option>
+                  <option value="COMPLETED">Completed</option>
+                </select>
+              </div>
 
-                  <option value="">
-                    {membersLoading
-                      ? "Loading mentors..."
-                      : "Select mentor"}
-                  </option>
+              <div>
+                <label
+                  htmlFor="edit-team-mentor"
+                  className="mb-2 block text-sm font-medium text-slate-700"
+                >
+                  Assign Mentor
+                </label>
+
+                <select
+                  id="edit-team-mentor"
+                  value={editMentor}
+                  onChange={(event) => setEditMentor(event.target.value)}
+                  disabled={saving || membersLoading}
+                  className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm outline-none focus:border-violet-400"
+                >
+                  <option value="">Select mentor</option>
 
                   {mentors.map((mentor) => (
                     <option
@@ -799,174 +622,134 @@ export default function TeamDetailsPage() {
                       value={mentor._id}
                     >
                       {mentor.name} — {mentor.email}
+                      {mentor.isSuspended ? " (Suspended)" : ""}
                     </option>
                   ))}
-
                 </select>
 
+                {mentors.length === 0 && !membersLoading && (
+                  <p className="mt-2 text-xs text-amber-600">
+                    No eligible mentors were returned by the API.
+                  </p>
+                )}
               </div>
 
-              {/* Students */}
               <div>
+                <div className="mb-2 flex items-center justify-between">
+                  <label className="text-sm font-medium text-slate-700">
+                    Assign Students
+                  </label>
 
-                <label className="mb-2 block text-sm font-medium text-slate-700">
-                  Students
-                </label>
-
-                <div className="max-h-48 space-y-2 overflow-y-auto rounded-xl border border-slate-200 p-3">
-
-                  {membersLoading ? (
-
-                    <p className="px-2 py-2 text-sm text-slate-400">
-                      Loading students...
-                    </p>
-
-                  ) : students.length === 0 ? (
-
-                    <p className="px-2 py-2 text-sm text-slate-400">
-                      No students available.
-                    </p>
-
-                  ) : (
-
-                    students.map((student) => (
-
-                      <label
-                        key={student._id}
-                        className="flex cursor-pointer items-center gap-3 rounded-lg px-2 py-2 hover:bg-slate-50"
-                      >
-
-                        <input
-                          type="checkbox"
-                          checked={editStudents.includes(
-                            student._id
-                          )}
-                          onChange={(e) => {
-
-                            if (e.target.checked) {
-
-                              setEditStudents(
-                                (current) => [
-                                  ...current,
-                                  student._id,
-                                ]
-                              );
-
-                            } else {
-
-                              setEditStudents(
-                                (current) =>
-                                  current.filter(
-                                    (id) =>
-                                      id !== student._id
-                                  )
-                              );
-
-                            }
-
-                          }}
-                          className="h-4 w-4 rounded border-slate-300 text-violet-600 focus:ring-violet-500"
-                        />
-
-                        <div className="min-w-0">
-
-                          <p className="text-sm font-medium text-slate-800">
-                            {student.name}
-                          </p>
-
-                          <p className="truncate text-xs text-slate-400">
-                            {student.email}
-                          </p>
-
-                        </div>
-
-                      </label>
-
-                    ))
-
-                  )}
-
+                  <span className="text-xs font-semibold text-violet-600">
+                    {editStudents.length} selected
+                  </span>
                 </div>
 
-                <p className="mt-1.5 text-xs text-slate-400">
-                  {editStudents.length} student
-                  {editStudents.length !== 1
-                    ? "s"
-                    : ""}{" "}
-                  selected
-                </p>
+                {membersLoading ? (
+                  <div className="rounded-xl border border-slate-200 p-6 text-center text-sm text-slate-500">
+                    Loading mentors and students...
+                  </div>
+                ) : students.length === 0 ? (
+                  <div className="rounded-xl border border-slate-200 p-6 text-center text-sm text-slate-500">
+                    No eligible students were returned by the API.
+                  </div>
+                ) : (
+                  <div className="max-h-60 overflow-y-auto rounded-xl border border-slate-200">
+                    {students.map((student) => {
+                      const selected = editStudents.includes(student._id);
 
+                      return (
+                        <label
+                          key={student._id}
+                          className={`flex cursor-pointer items-center gap-3 border-b border-slate-100 px-4 py-3 last:border-0 ${
+                            selected ? "bg-violet-50" : "hover:bg-slate-50"
+                          }`}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={selected}
+                            disabled={saving}
+                            onChange={() => toggleStudent(student._id)}
+                            className="h-4 w-4 accent-violet-600"
+                          />
+
+                          <span className="min-w-0 flex-1">
+                            <span className="block truncate text-sm font-semibold text-slate-900">
+                              {student.name}
+                            </span>
+
+                            <span className="block truncate text-xs text-slate-500">
+                              {student.email}
+                            </span>
+                          </span>
+
+                          {student.isSuspended && (
+                            <span className="text-xs font-medium text-amber-700">
+                              Suspended
+                            </span>
+                          )}
+                        </label>
+                      );
+                    })}
+                  </div>
+                )}
               </div>
 
-              {/* Status */}
-              <div>
-
-                <label className="mb-2 block text-sm font-medium text-slate-700">
-                  Status
-                </label>
-
-                <select
-                  value={editStatus}
-                  onChange={(e) =>
-                    setEditStatus(
-                      e.target.value as Team["status"]
-                    )
-                  }
-                  className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-violet-500 focus:ring-2 focus:ring-violet-100"
+              <div className="flex justify-end gap-3 border-t border-slate-100 pt-5">
+                <button
+                  type="button"
+                  onClick={closeEditModal}
+                  disabled={saving}
+                  className="rounded-xl border border-slate-200 px-4 py-2.5 text-sm font-semibold text-slate-600 hover:bg-slate-50"
                 >
+                  Cancel
+                </button>
 
-                  <option value="ACTIVE">
-                    Active
-                  </option>
-
-                  <option value="PENDING">
-                    Pending
-                  </option>
-
-                  <option value="COMPLETED">
-                    Completed
-                  </option>
-
-                </select>
-
+                <button
+                  type="button"
+                  onClick={() => void handleUpdateTeam()}
+                  disabled={saving || membersLoading}
+                  className="inline-flex items-center gap-2 rounded-xl bg-violet-600 px-5 py-2.5 text-sm font-semibold text-white hover:bg-violet-700 disabled:opacity-50"
+                >
+                  <Save size={16} />
+                  {saving ? "Saving..." : "Save Changes"}
+                </button>
               </div>
-
             </div>
-
-            {/* Modal Footer */}
-            <div className="flex items-center justify-end gap-3 border-t border-slate-100 px-6 py-5">
-
-              <button
-                type="button"
-                onClick={closeEditModal}
-                disabled={saving}
-                className="rounded-xl border border-slate-200 px-4 py-2.5 text-sm font-medium text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
-              >
-                Cancel
-              </button>
-
-              <button
-                type="button"
-                onClick={handleUpdateTeam}
-                disabled={saving || membersLoading}
-                className="inline-flex items-center gap-2 rounded-xl bg-violet-600 px-4 py-2.5 text-sm font-medium text-white transition hover:bg-violet-700 disabled:cursor-not-allowed disabled:opacity-60"
-              >
-
-                <Save className="h-4 w-4" />
-
-                {saving
-                  ? "Saving..."
-                  : "Save Changes"}
-
-              </button>
-
-            </div>
-
           </div>
-
         </div>
       )}
+    </div>
+  );
+}
 
+function InfoCard({
+  icon,
+  label,
+  value,
+  color,
+}: {
+  icon: ReactNode;
+  label: string;
+  value: string;
+  color: string;
+}) {
+  return (
+    <div className="rounded-2xl border border-slate-200 bg-white p-5">
+      <div className="flex items-center gap-3">
+        <div
+          className={`flex h-11 w-11 items-center justify-center rounded-xl ${color}`}
+        >
+          {icon}
+        </div>
+
+        <div className="min-w-0">
+          <p className="text-sm text-slate-500">{label}</p>
+          <p className="truncate text-lg font-bold text-slate-900">
+            {value}
+          </p>
+        </div>
+      </div>
     </div>
   );
 }

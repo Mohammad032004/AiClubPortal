@@ -10,6 +10,8 @@ import User from "@/models/User";
 
 type MentorAction = "suspend" | "activate";
 
+type MentorRequestBody = Record<string, unknown>;
+
 function jsonError(message: string, status: number) {
   return NextResponse.json(
     { success: false, message },
@@ -20,27 +22,36 @@ function jsonError(message: string, status: number) {
 async function requireAdmin() {
   const session = await getServerSession(authOptions);
 
-  if (!session?.user || session.user.role !== "ADMIN") {
-    return false;
-  }
-
-  return true;
+  return Boolean(
+    session?.user && session.user.role === "ADMIN"
+  );
 }
 
-function normalizeEmail(value: unknown) {
+function normalizeEmail(value: unknown): string {
   return String(value ?? "").trim().toLowerCase();
 }
 
-function validEmail(email: string) {
+function validEmail(email: string): boolean {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
 }
 
-function validMentorId(id: string) {
-  return mongoose.Types.ObjectId.isValid(id);
+function validMentorId(id: string): boolean {
+  return mongoose.isValidObjectId(id);
+}
+
+function isDuplicateKeyError(
+  error: unknown
+): error is { code: number } {
+  return (
+    typeof error === "object" &&
+    error !== null &&
+    "code" in error &&
+    error.code === 11000
+  );
 }
 
 // GET /api/admin/mentors
-// List mentor accounts without exposing password hashes.
+// Return mentors with both _id and id for frontend compatibility.
 export async function GET() {
   try {
     if (!(await requireAdmin())) {
@@ -57,6 +68,7 @@ export async function GET() {
     return NextResponse.json({
       success: true,
       mentors: mentors.map((mentor) => ({
+        _id: mentor._id.toString(),
         id: mentor._id.toString(),
         name: mentor.name,
         email: mentor.email,
@@ -68,6 +80,7 @@ export async function GET() {
     });
   } catch (error) {
     console.error("GET mentors error:", error);
+
     return jsonError("Failed to fetch mentors.", 500);
   }
 }
@@ -80,7 +93,7 @@ export async function POST(request: Request) {
       return jsonError("Unauthorized.", 401);
     }
 
-    let body: Record<string, unknown>;
+    let body: MentorRequestBody;
 
     try {
       body = await request.json();
@@ -140,29 +153,27 @@ export async function POST(request: Request) {
       isSuspended: false,
     });
 
+    const mentorId = mentor._id.toString();
+
     return NextResponse.json(
       {
         success: true,
         message: "Mentor created successfully.",
         mentor: {
-          id: mentor._id.toString(),
+          _id: mentorId,
+          id: mentorId,
           name: mentor.name,
           email: mentor.email,
           role: mentor.role,
           createdAt: mentor.createdAt,
+          updatedAt: mentor.updatedAt,
           isSuspended: Boolean(mentor.isSuspended),
         },
       },
       { status: 201 }
     );
   } catch (error) {
-    // Also handles concurrent requests for a unique email.
-    if (
-      error &&
-      typeof error === "object" &&
-      "code" in error &&
-      error.code === 11000
-    ) {
+    if (isDuplicateKeyError(error)) {
       return jsonError(
         "A user with this email already exists.",
         409
@@ -170,12 +181,12 @@ export async function POST(request: Request) {
     }
 
     console.error("POST mentor error:", error);
+
     return jsonError("Failed to create mentor.", 500);
   }
 }
 
 // PATCH /api/admin/mentors
-// Edit a mentor or suspend/activate the account.
 //
 // Edit body:
 // { memberId, name, email, password? }
@@ -188,7 +199,7 @@ export async function PATCH(request: Request) {
       return jsonError("Unauthorized.", 401);
     }
 
-    let body: Record<string, unknown>;
+    let body: MentorRequestBody;
 
     try {
       body = await request.json();
@@ -215,10 +226,15 @@ export async function PATCH(request: Request) {
 
     const action = String(body.action ?? "");
 
-    if (action === "suspend" || action === "activate") {
+    if (
+      action === "suspend" ||
+      action === "activate"
+    ) {
+      const mentorAction = action as MentorAction;
+
       mentor.set(
         "isSuspended",
-        action === "suspend"
+        mentorAction === "suspend"
       );
 
       await mentor.save();
@@ -226,10 +242,11 @@ export async function PATCH(request: Request) {
       return NextResponse.json({
         success: true,
         message:
-          action === "suspend"
+          mentorAction === "suspend"
             ? "Mentor suspended successfully."
             : "Mentor activated successfully.",
         mentor: {
+          _id: mentor._id.toString(),
           id: mentor._id.toString(),
           name: mentor.name,
           email: mentor.email,
@@ -262,7 +279,10 @@ export async function PATCH(request: Request) {
       return jsonError("Enter a valid email address.", 400);
     }
 
-    if (password && (password.length < 6 || password.length > 128)) {
+    if (
+      password &&
+      (password.length < 6 || password.length > 128)
+    ) {
       return jsonError(
         "Password must contain 6–128 characters.",
         400
@@ -296,6 +316,7 @@ export async function PATCH(request: Request) {
       success: true,
       message: "Mentor updated successfully.",
       mentor: {
+        _id: mentor._id.toString(),
         id: mentor._id.toString(),
         name: mentor.name,
         email: mentor.email,
@@ -306,12 +327,7 @@ export async function PATCH(request: Request) {
       },
     });
   } catch (error) {
-    if (
-      error &&
-      typeof error === "object" &&
-      "code" in error &&
-      error.code === 11000
-    ) {
+    if (isDuplicateKeyError(error)) {
       return jsonError(
         "A user with this email already exists.",
         409
@@ -319,6 +335,7 @@ export async function PATCH(request: Request) {
     }
 
     console.error("PATCH mentor error:", error);
+
     return jsonError("Failed to update mentor.", 500);
   }
 }
@@ -331,7 +348,7 @@ export async function DELETE(request: Request) {
       return jsonError("Unauthorized.", 401);
     }
 
-    let body: Record<string, unknown>;
+    let body: MentorRequestBody;
 
     try {
       body = await request.json();
@@ -362,6 +379,7 @@ export async function DELETE(request: Request) {
     });
   } catch (error) {
     console.error("DELETE mentor error:", error);
+
     return jsonError("Failed to delete mentor.", 500);
   }
 }

@@ -1,6 +1,8 @@
-"use client";
-import Link from "next/link";
 
+"use client";
+
+import { useEffect, useState, type FormEvent, type ReactNode } from "react";
+import Link from "next/link";
 import {
   FolderKanban,
   Plus,
@@ -9,14 +11,15 @@ import {
   UserRound,
   Users,
   X,
+  ArrowRight,
 } from "lucide-react";
-import { useEffect, useState } from "react";
 
 type User = {
   _id: string;
   name: string;
   email: string;
   role: "MENTOR" | "STUDENT";
+  isSuspended?: boolean;
 };
 
 type Team = {
@@ -25,7 +28,48 @@ type Team = {
   mentor: User;
   students: User[];
   status: "ACTIVE" | "COMPLETED" | "PENDING";
+  createdAt?: string;
 };
+
+type ApiResponse = {
+  success?: boolean;
+  message?: string;
+  mentors?: User[];
+  members?: User[];
+  teams?: Team[];
+  team?: Team;
+  [key: string]: unknown;
+};
+
+async function readResponse(
+  response: Response,
+  label: string
+): Promise<ApiResponse> {
+  const text = await response.text();
+
+  if (!text) {
+    throw new Error(
+      `${label} returned an empty response (${response.status}).`
+    );
+  }
+
+  let data: ApiResponse;
+
+  try {
+    data = JSON.parse(text) as ApiResponse;
+  } catch {
+    console.error(`${label} returned invalid JSON:`, text);
+    throw new Error(`${label} returned invalid JSON.`);
+  }
+
+  if (!response.ok || data.success === false) {
+    throw new Error(
+      data.message || `${label} failed with status ${response.status}.`
+    );
+  }
+
+  return data;
+}
 
 export default function TeamsPage() {
   const [teams, setTeams] = useState<Team[]>([]);
@@ -33,10 +77,10 @@ export default function TeamsPage() {
   const [students, setStudents] = useState<User[]>([]);
 
   const [loading, setLoading] = useState(true);
-  const [showCreateForm, setShowCreateForm] = useState(false);
-  const [search, setSearch] = useState("");
-
   const [creating, setCreating] = useState(false);
+  const [showCreateForm, setShowCreateForm] = useState(false);
+
+  const [search, setSearch] = useState("");
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
 
@@ -46,117 +90,61 @@ export default function TeamsPage() {
     studentIds: [] as string[],
   });
 
-  // ==========================================
-  // LOAD MEMBERS + TEAMS
-  // ==========================================
-
   async function loadData() {
     try {
       setLoading(true);
       setError("");
 
-      // -------------------------------
-      // Load members
-      // -------------------------------
+      const [mentorsResponse, membersResponse, teamsResponse] =
+        await Promise.all([
+          fetch("/api/admin/mentors", { cache: "no-store" }),
+          fetch("/api/admin/members", { cache: "no-store" }),
+          fetch("/api/admin/teams", { cache: "no-store" }),
+        ]);
 
-      const membersResponse = await fetch(
-        "/api/admin/members",
-        {
-          cache: "no-store",
-        }
+      const [mentorsData, membersData, teamsData] = await Promise.all([
+        readResponse(mentorsResponse, "Mentors API"),
+        readResponse(membersResponse, "Members API"),
+        readResponse(teamsResponse, "Teams API"),
+      ]);
+
+      // Keep only active mentors and remove duplicate IDs.
+      const mentorRecords = (mentorsData.mentors || []).filter(
+        (mentor) =>
+          mentor.role === "MENTOR" &&
+          !mentor.isSuspended &&
+          Boolean(mentor._id)
       );
 
-      const membersText = await membersResponse.text();
-
-      console.log("Members API:", {
-        status: membersResponse.status,
-        body: membersText,
-      });
-
-      if (!membersText) {
-        throw new Error(
-          `Members API returned an empty response (${membersResponse.status}).`
-        );
-      }
-
-      let membersData;
-
-      try {
-        membersData = JSON.parse(membersText);
-      } catch {
-        throw new Error(
-          `Members API returned invalid JSON: ${membersText}`
-        );
-      }
-
-      if (!membersResponse.ok) {
-        throw new Error(
-          membersData.message || "Failed to load members."
-        );
-      }
-
-      const members: User[] = membersData.members || [];
-
-      // Separate mentors and students
-      setMentors(
-        members.filter(
-          (member) => member.role === "MENTOR"
-        )
+      const uniqueMentors = Array.from(
+        new Map(
+          mentorRecords.map((mentor) => [mentor._id, mentor])
+        ).values()
       );
 
-      setStudents(
-        members.filter(
-          (member) => member.role === "STUDENT"
-        )
+      // Keep only active students and remove duplicate IDs.
+      const studentRecords = (membersData.members || []).filter(
+        (student) =>
+          student.role === "STUDENT" &&
+          !student.isSuspended &&
+          Boolean(student._id)
       );
 
-      // -------------------------------
-      // Load teams
-      // -------------------------------
-
-      const teamsResponse = await fetch(
-        "/api/admin/teams",
-        {
-          cache: "no-store",
-        }
+      const uniqueStudents = Array.from(
+        new Map(
+          studentRecords.map((student) => [student._id, student])
+        ).values()
       );
 
-      const teamsText = await teamsResponse.text();
-
-      console.log("Teams API:", {
-        status: teamsResponse.status,
-        body: teamsText,
-      });
-
-      if (!teamsText) {
-        throw new Error(
-          `Teams API returned an empty response (${teamsResponse.status}).`
-        );
-      }
-
-      let teamsData;
-
-      try {
-        teamsData = JSON.parse(teamsText);
-      } catch {
-        throw new Error(
-          `Teams API returned invalid JSON: ${teamsText}`
-        );
-      }
-
-      if (!teamsResponse.ok) {
-        throw new Error(
-          teamsData.message || "Failed to load teams."
-        );
-      }
-
+      setMentors(uniqueMentors);
+      setStudents(uniqueStudents);
       setTeams(teamsData.teams || []);
-    } catch (error) {
-      console.error("Teams page error:", error);
+    } catch (err) {
+      console.error("Teams page error:", err);
 
       setError(
-        error instanceof Error
-          ? error.message
+        err instanceof Error
+          ? err.message
           : "Failed to load teams."
       );
     } finally {
@@ -165,43 +153,36 @@ export default function TeamsPage() {
   }
 
   useEffect(() => {
-    loadData();
+    void loadData();
   }, []);
 
-  // ==========================================
-  // SELECT / UNSELECT STUDENT
-  // ==========================================
-
   function toggleStudent(studentId: string) {
-    setForm((previous) => {
-      const alreadySelected =
-        previous.studentIds.includes(studentId);
-
-      return {
-        ...previous,
-
-        studentIds: alreadySelected
-          ? previous.studentIds.filter(
-              (id) => id !== studentId
-            )
-          : [...previous.studentIds, studentId],
-      };
-    });
+    setForm((previous) => ({
+      ...previous,
+      studentIds: previous.studentIds.includes(studentId)
+        ? previous.studentIds.filter((id) => id !== studentId)
+        : [...previous.studentIds, studentId],
+    }));
   }
 
-  // ==========================================
-  // CREATE TEAM
-  // ==========================================
+  function openCreateForm() {
+    setError("");
+    setMessage("");
+    setForm({
+      name: "",
+      mentorId: "",
+      studentIds: [],
+    });
+    setShowCreateForm(true);
+  }
 
   async function handleCreateTeam(
-    event: React.FormEvent<HTMLFormElement>
+    event: FormEvent<HTMLFormElement>
   ) {
     event.preventDefault();
-
     setError("");
     setMessage("");
 
-    // Validation
     if (!form.name.trim()) {
       setError("Please enter a team name.");
       return;
@@ -222,11 +203,9 @@ export default function TeamsPage() {
 
       const response = await fetch("/api/admin/teams", {
         method: "POST",
-
         headers: {
           "Content-Type": "application/json",
         },
-
         body: JSON.stringify({
           name: form.name.trim(),
           mentorId: form.mentorId,
@@ -234,40 +213,13 @@ export default function TeamsPage() {
         }),
       });
 
-      // IMPORTANT:
-      // Read as text first so an empty response
-      // doesn't cause "Unexpected end of JSON input".
-      const responseText = await response.text();
+      const data = await readResponse(response, "Create team API");
 
-      console.log("Create Team Response:", {
-        status: response.status,
-        body: responseText,
-      });
-
-      if (!responseText) {
-        throw new Error(
-          `Server returned an empty response (${response.status}).`
-        );
+      if (data.success === false) {
+        throw new Error(data.message || "Failed to create team.");
       }
 
-      let data;
-
-      try {
-        data = JSON.parse(responseText);
-      } catch {
-        throw new Error(
-          `Server returned invalid JSON: ${responseText}`
-        );
-      }
-
-      if (!response.ok) {
-        throw new Error(
-          data.message || "Failed to create team."
-        );
-      }
-
-      // Success
-      setMessage("Team created successfully.");
+      setMessage(data.message || "Team created successfully.");
 
       setForm({
         name: "",
@@ -277,14 +229,13 @@ export default function TeamsPage() {
 
       setShowCreateForm(false);
 
-      // Refresh teams
       await loadData();
-    } catch (error) {
-      console.error("Create team error:", error);
+    } catch (err) {
+      console.error("Create team error:", err);
 
       setError(
-        error instanceof Error
-          ? error.message
+        err instanceof Error
+          ? err.message
           : "Failed to create team."
       );
     } finally {
@@ -292,26 +243,20 @@ export default function TeamsPage() {
     }
   }
 
-  // ==========================================
-  // SEARCH
-  // ==========================================
+  const query = search.trim().toLowerCase();
 
   const filteredTeams = teams.filter((team) => {
-    const searchText = search.toLowerCase();
-
     return (
-      team.name
-        .toLowerCase()
-        .includes(searchText) ||
-      team.mentor?.name
-        ?.toLowerCase()
-        .includes(searchText)
+      team.name?.toLowerCase().includes(query) ||
+      team.mentor?.name?.toLowerCase().includes(query) ||
+      team.mentor?.email?.toLowerCase().includes(query) ||
+      team.students?.some(
+        (student) =>
+          student.name?.toLowerCase().includes(query) ||
+          student.email?.toLowerCase().includes(query)
+      )
     );
   });
-
-  // ==========================================
-  // STATS
-  // ==========================================
 
   const activeTeams = teams.filter(
     (team) => team.status === "ACTIVE"
@@ -322,262 +267,207 @@ export default function TeamsPage() {
   );
 
   const totalStudents = teams.reduce(
-    (total, team) =>
-      total + (team.students?.length || 0),
+    (total, team) => total + (team.students?.length || 0),
     0
   );
 
-  // ==========================================
-  // UI
-  // ==========================================
+  function statusClass(status: Team["status"]) {
+    if (status === "ACTIVE") {
+      return "border-emerald-200 bg-emerald-50 text-emerald-700";
+    }
+
+    if (status === "COMPLETED") {
+      return "border-blue-200 bg-blue-50 text-blue-700";
+    }
+
+    return "border-amber-200 bg-amber-50 text-amber-700";
+  }
 
   return (
     <div className="mx-auto max-w-[1600px] px-5 py-8 lg:px-8">
-      {/* ======================================
-          PAGE HEADER
-      ====================================== */}
-
+      {/* Page header */}
       <div className="mb-8 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight text-slate-900 sm:text-3xl">
+          <h1 className="text-3xl font-bold tracking-tight text-slate-900">
             Teams
           </h1>
 
           <p className="mt-2 text-sm text-slate-500">
-            Create and manage AI Club teams and their
-            members.
+            Create and manage AI Club teams, mentors, and students.
           </p>
         </div>
 
         <button
-          onClick={() => {
-            setError("");
-            setMessage("");
-            setShowCreateForm(true);
-          }}
-          className="flex w-fit items-center gap-2 rounded-xl bg-violet-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-violet-700"
+          type="button"
+          onClick={openCreateForm}
+          className="flex w-fit items-center gap-2 rounded-xl bg-violet-600 px-4 py-3 text-sm font-semibold text-white transition hover:bg-violet-700"
         >
           <Plus size={18} />
           Create Team
         </button>
       </div>
 
-      {/* ======================================
-          SUCCESS MESSAGE
-      ====================================== */}
-
+      {/* Feedback */}
       {message && (
-        <div className="mb-5 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-medium text-emerald-700">
+        <div className="mb-5 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">
           {message}
         </div>
       )}
 
-      {/* ======================================
-          ERROR MESSAGE
-      ====================================== */}
-
       {error && !showCreateForm && (
-        <div className="mb-5 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-medium text-red-700">
+        <div className="mb-5 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
           {error}
+          <button
+            type="button"
+            onClick={() => void loadData()}
+            className="ml-3 font-semibold underline"
+          >
+            Retry
+          </button>
         </div>
       )}
 
-      {/* ======================================
-          STATS
-      ====================================== */}
-
+      {/* Statistics */}
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <StatCard
           title="Total Teams"
           value={teams.length}
           icon={<Users size={21} />}
-          iconClass="bg-violet-50 text-violet-600"
+          color="bg-violet-50 text-violet-600"
         />
 
         <StatCard
           title="Active Teams"
           value={activeTeams.length}
           icon={<ShieldCheck size={21} />}
-          iconClass="bg-emerald-50 text-emerald-600"
+          color="bg-emerald-50 text-emerald-600"
         />
 
         <StatCard
           title="Completed Teams"
           value={completedTeams.length}
           icon={<FolderKanban size={21} />}
-          iconClass="bg-cyan-50 text-cyan-600"
+          color="bg-cyan-50 text-cyan-600"
         />
 
         <StatCard
           title="Students Assigned"
           value={totalStudents}
           icon={<UserRound size={21} />}
-          iconClass="bg-amber-50 text-amber-600"
+          color="bg-amber-50 text-amber-600"
         />
       </div>
 
-      {/* ======================================
-          TEAMS TABLE
-      ====================================== */}
-
+      {/* Teams table */}
       <div className="mt-6 overflow-hidden rounded-2xl border border-slate-200 bg-white">
-        {/* Table Header */}
-
         <div className="flex flex-col gap-4 border-b border-slate-100 p-5 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <h2 className="font-semibold text-slate-900">
               All Teams
             </h2>
 
-            <p className="mt-1 text-xs text-slate-400">
-              Manage teams, mentors and students.
+            <p className="mt-1 text-xs text-slate-500">
+              View team information and manage assignments.
             </p>
           </div>
 
-          {/* Search */}
-
-          <div className="relative w-full sm:w-72">
+          <div className="relative w-full sm:max-w-xs">
             <Search
               size={17}
               className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"
             />
 
             <input
-              type="text"
               value={search}
-              onChange={(event) =>
-                setSearch(event.target.value)
-              }
-              placeholder="Search teams..."
-              className="w-full rounded-xl border border-slate-200 bg-slate-50 py-2.5 pl-10 pr-4 text-sm outline-none transition focus:border-violet-400 focus:ring-2 focus:ring-violet-100"
+              onChange={(event) => setSearch(event.target.value)}
+              placeholder="Search teams, mentors, students..."
+              className="w-full rounded-xl border border-slate-200 py-2.5 pl-9 pr-3 text-sm outline-none focus:border-violet-400 focus:ring-2 focus:ring-violet-100"
             />
           </div>
         </div>
 
-        {/* Loading */}
-
         {loading ? (
-          <div className="flex min-h-72 items-center justify-center">
-            <p className="text-sm text-slate-500">
-              Loading teams...
-            </p>
+          <div className="p-12 text-center text-sm text-slate-500">
+            Loading teams...
           </div>
         ) : filteredTeams.length === 0 ? (
-          /* Empty */
+          <div className="p-12 text-center">
+            <Users
+              className="mx-auto mb-3 text-slate-300"
+              size={36}
+            />
 
-          <div className="flex min-h-72 flex-col items-center justify-center px-6 text-center">
-            <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-violet-50 text-violet-600">
-              <Users size={25} />
-            </div>
-
-            <h3 className="mt-4 font-semibold text-slate-900">
-              {search
-                ? "No teams found"
-                : "No teams created yet"}
+            <h3 className="font-semibold text-slate-800">
+              No teams found
             </h3>
 
-            <p className="mt-1 max-w-sm text-sm text-slate-500">
+            <p className="mt-1 text-sm text-slate-500">
               {search
-                ? "Try another search."
+                ? "Try a different search."
                 : "Create your first team to get started."}
             </p>
           </div>
         ) : (
-          /* Table */
-
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[850px]">
-              <thead>
-                <tr className="border-b border-slate-100 bg-slate-50/70 text-left">
-                  <th className="px-6 py-4 text-xs font-semibold uppercase tracking-wide text-slate-400">
-                    Team
-                  </th>
-
-                  <th className="px-6 py-4 text-xs font-semibold uppercase tracking-wide text-slate-400">
-                    Mentor
-                  </th>
-
-                  <th className="px-6 py-4 text-xs font-semibold uppercase tracking-wide text-slate-400">
-                    Students
-                  </th>
-
-                  <th className="px-6 py-4 text-xs font-semibold uppercase tracking-wide text-slate-400">
-                    Status
-                  </th>
+            <table className="w-full min-w-[760px] text-left text-sm">
+              <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
+                <tr>
+                  <th className="px-5 py-4">Team</th>
+                  <th className="px-5 py-4">Mentor</th>
+                  <th className="px-5 py-4">Students</th>
+                  <th className="px-5 py-4">Status</th>
+                  <th className="px-5 py-4 text-right">Action</th>
                 </tr>
               </thead>
 
               <tbody className="divide-y divide-slate-100">
-                {filteredTeams.map((team) => (
+                {filteredTeams.map((team, index) => (
                   <tr
-                    key={team._id}
-                    className="transition hover:bg-slate-50/70"
+                    key={team._id || `team-${index}`}
+                    className="hover:bg-slate-50/70"
                   >
-                    {/* Team */}
+                    <td className="px-5 py-4">
+                      <p className="font-semibold text-slate-900">
+                        {team.name}
+                      </p>
 
-                    <td className="px-6 py-4">
-                      <div className="flex items-center gap-3">
-                        <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-violet-100 text-violet-700">
-                          <Users size={19} />
-                        </div>
-
-                        <div>
-  <Link
-    href={`/admin/teams/${team._id}`}
-    className="text-sm font-semibold text-slate-900 transition hover:text-violet-600"
-  >
-    {team.name}
-  </Link>
-
-  <p className="text-xs text-slate-400">
-    AI Club Team
-  </p>
-</div>
-                      </div>
+                      <p className="mt-1 text-xs text-slate-400">
+                        ID: {team._id}
+                      </p>
                     </td>
 
-                    {/* Mentor */}
+                    <td className="px-5 py-4">
+                      <p className="font-medium text-slate-800">
+                        {team.mentor?.name || "Not assigned"}
+                      </p>
 
-                    <td className="px-6 py-4">
-                      <div className="flex items-center gap-2">
-                        <div className="flex h-8 w-8 items-center justify-center rounded-full bg-cyan-50 text-cyan-700">
-                          <ShieldCheck size={15} />
-                        </div>
-
-                        <span className="text-sm text-slate-600">
-                          {team.mentor?.name ||
-                            "No mentor"}
-                        </span>
-                      </div>
+                      <p className="mt-1 text-xs text-slate-500">
+                        {team.mentor?.email || ""}
+                      </p>
                     </td>
 
-                    {/* Students */}
-
-                    <td className="px-6 py-4">
-                      <div className="flex items-center gap-2 text-sm text-slate-600">
-                        <UserRound
-                          size={16}
-                          className="text-slate-400"
-                        />
-
-                        {team.students?.length || 0} Students
-                      </div>
+                    <td className="px-5 py-4">
+                      <span className="rounded-lg bg-violet-50 px-2.5 py-1.5 text-xs font-semibold text-violet-700">
+                        {team.students?.length || 0} students
+                      </span>
                     </td>
 
-                    {/* Status */}
-
-                    <td className="px-6 py-4">
+                    <td className="px-5 py-4">
                       <span
-                        className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold ${
-                          team.status === "ACTIVE"
-                            ? "bg-emerald-50 text-emerald-700"
-                            : team.status === "COMPLETED"
-                              ? "bg-cyan-50 text-cyan-700"
-                              : "bg-amber-50 text-amber-700"
-                        }`}
+                        className={`rounded-full border px-2.5 py-1 text-xs font-semibold ${statusClass(team.status)}`}
                       >
                         {team.status}
                       </span>
+                    </td>
+
+                    <td className="px-5 py-4 text-right">
+                      <Link
+                        href={`/admin/teams/${team._id}`}
+                        className="inline-flex items-center gap-2 rounded-lg border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-700 transition hover:border-violet-200 hover:bg-violet-50 hover:text-violet-700"
+                      >
+                        View Details
+                        <ArrowRight size={14} />
+                      </Link>
                     </td>
                   </tr>
                 ))}
@@ -587,15 +477,10 @@ export default function TeamsPage() {
         )}
       </div>
 
-      {/* ======================================
-          CREATE TEAM MODAL
-      ====================================== */}
-
+      {/* Create team modal */}
       {showCreateForm && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/40 p-5">
-          <div className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-2xl bg-white shadow-2xl">
-            {/* Modal Header */}
-
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/40 p-4">
+          <div className="max-h-[90vh] w-full max-w-xl overflow-y-auto rounded-2xl bg-white shadow-2xl">
             <div className="sticky top-0 flex items-start justify-between border-b border-slate-100 bg-white px-6 py-5">
               <div>
                 <h2 className="text-lg font-bold text-slate-900">
@@ -603,79 +488,77 @@ export default function TeamsPage() {
                 </h2>
 
                 <p className="mt-1 text-sm text-slate-500">
-                  Assign a mentor and students to this
-                  team.
+                  Select an active mentor and at least one student.
                 </p>
               </div>
 
               <button
                 type="button"
-                onClick={() =>
-                  setShowCreateForm(false)
-                }
-                className="rounded-lg p-2 text-slate-400 transition hover:bg-slate-100 hover:text-slate-700"
+                onClick={() => setShowCreateForm(false)}
+                disabled={creating}
+                aria-label="Close create team form"
+                className="rounded-lg p-2 text-slate-400 hover:bg-slate-100 disabled:opacity-50"
               >
                 <X size={19} />
               </button>
             </div>
 
-            {/* Form */}
-
             <form
               onSubmit={handleCreateTeam}
               className="space-y-5 p-6"
             >
-              {/* Error */}
-
               {error && (
-                <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-medium text-red-700">
+                <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
                   {error}
                 </div>
               )}
 
-              {/* Team Name */}
-
+              {/* Team name */}
               <div>
-                <label className="mb-2 block text-sm font-medium text-slate-700">
+                <label
+                  htmlFor="team-name"
+                  className="mb-2 block text-sm font-medium text-slate-700"
+                >
                   Team Name
                 </label>
 
                 <input
-                  type="text"
+                  id="team-name"
                   value={form.name}
                   onChange={(event) =>
-                    setForm({
-                      ...form,
+                    setForm((previous) => ({
+                      ...previous,
                       name: event.target.value,
-                    })
+                    }))
                   }
                   placeholder="e.g. Team Alpha"
                   disabled={creating}
-                  className="w-full rounded-xl border border-slate-200 px-4 py-3 text-sm outline-none transition focus:border-violet-400 focus:ring-2 focus:ring-violet-100 disabled:bg-slate-50"
+                  className="w-full rounded-xl border border-slate-200 px-4 py-3 text-sm outline-none focus:border-violet-400 focus:ring-2 focus:ring-violet-100"
                 />
               </div>
 
-              {/* Mentor */}
-
+              {/* Mentor selection */}
               <div>
-                <label className="mb-2 block text-sm font-medium text-slate-700">
+                <label
+                  htmlFor="team-mentor"
+                  className="mb-2 block text-sm font-medium text-slate-700"
+                >
                   Assign Mentor
                 </label>
 
                 <select
+                  id="team-mentor"
                   value={form.mentorId}
                   onChange={(event) =>
-                    setForm({
-                      ...form,
+                    setForm((previous) => ({
+                      ...previous,
                       mentorId: event.target.value,
-                    })
+                    }))
                   }
-                  disabled={creating}
-                  className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm outline-none transition focus:border-violet-400 focus:ring-2 focus:ring-violet-100 disabled:bg-slate-50"
+                  disabled={creating || mentors.length === 0}
+                  className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm outline-none focus:border-violet-400"
                 >
-                  <option value="" disabled>
-                    Select mentor
-                  </option>
+                  <option value="">Select mentor</option>
 
                   {mentors.map((mentor) => (
                     <option
@@ -689,54 +572,48 @@ export default function TeamsPage() {
 
                 {mentors.length === 0 && (
                   <p className="mt-2 text-xs text-amber-600">
-                    No mentors are available. Create a
-                    mentor from the Members page first.
+                    No active mentors are available. Create a mentor
+                    from the Mentors page first.
                   </p>
                 )}
               </div>
 
-              {/* Students */}
-
+              {/* Student selection */}
               <div>
                 <div className="mb-2 flex items-center justify-between">
                   <label className="text-sm font-medium text-slate-700">
                     Select Students
                   </label>
 
-                  <span className="text-xs font-medium text-violet-600">
+                  <span className="text-xs font-semibold text-violet-600">
                     {form.studentIds.length} selected
                   </span>
                 </div>
 
-                <div className="max-h-56 overflow-y-auto rounded-xl border border-slate-200">
+                <div className="max-h-60 overflow-y-auto rounded-xl border border-slate-200">
                   {students.length === 0 ? (
-                    <div className="p-4 text-center text-sm text-slate-500">
-                      No students are available.
-                    </div>
+                    <p className="p-4 text-center text-sm text-slate-500">
+                      No active students are available.
+                    </p>
                   ) : (
                     students.map((student) => {
-                      const selected =
-                        form.studentIds.includes(
-                          student._id
-                        );
+                      const selected = form.studentIds.includes(
+                        student._id
+                      );
 
                       return (
                         <button
-                          key={student._id}
                           type="button"
+                          key={student._id}
                           disabled={creating}
-                          onClick={() =>
-                            toggleStudent(student._id)
-                          }
-                          className={`flex w-full items-center gap-3 border-b border-slate-100 px-4 py-3 text-left transition last:border-b-0 ${
+                          onClick={() => toggleStudent(student._id)}
+                          className={`flex w-full items-center gap-3 border-b border-slate-100 px-4 py-3 text-left last:border-0 ${
                             selected
                               ? "bg-violet-50"
                               : "hover:bg-slate-50"
-                          } disabled:opacity-60`}
+                          }`}
                         >
-                          {/* Avatar */}
-
-                          <div
+                          <span
                             className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-xs font-bold ${
                               selected
                                 ? "bg-violet-600 text-white"
@@ -745,41 +622,31 @@ export default function TeamsPage() {
                           >
                             {student.name
                               .split(" ")
-                              .map(
-                                (word) => word[0]
-                              )
+                              .map((part) => part[0])
                               .join("")
                               .slice(0, 2)
                               .toUpperCase()}
-                          </div>
+                          </span>
 
-                          {/* Student info */}
-
-                          <div className="min-w-0 flex-1">
-                            <p className="truncate text-sm font-semibold text-slate-900">
+                          <span className="min-w-0 flex-1">
+                            <span className="block truncate text-sm font-semibold text-slate-900">
                               {student.name}
-                            </p>
+                            </span>
 
-                            <p className="truncate text-xs text-slate-400">
+                            <span className="block truncate text-xs text-slate-500">
                               {student.email}
-                            </p>
-                          </div>
+                            </span>
+                          </span>
 
-                          {/* Checkbox */}
-
-                          <div
-                            className={`flex h-5 w-5 items-center justify-center rounded-md border ${
+                          <span
+                            className={`flex h-5 w-5 items-center justify-center rounded border text-xs ${
                               selected
                                 ? "border-violet-600 bg-violet-600 text-white"
                                 : "border-slate-300"
                             }`}
                           >
-                            {selected && (
-                              <span className="text-xs">
-                                ✓
-                              </span>
-                            )}
-                          </div>
+                            {selected ? "✓" : ""}
+                          </span>
                         </button>
                       );
                     })
@@ -787,16 +654,13 @@ export default function TeamsPage() {
                 </div>
               </div>
 
-              {/* Actions */}
-
+              {/* Modal actions */}
               <div className="flex justify-end gap-3 border-t border-slate-100 pt-5">
                 <button
                   type="button"
-                  onClick={() =>
-                    setShowCreateForm(false)
-                  }
+                  onClick={() => setShowCreateForm(false)}
                   disabled={creating}
-                  className="rounded-xl border border-slate-200 px-4 py-2.5 text-sm font-semibold text-slate-600 transition hover:bg-slate-50 disabled:opacity-50"
+                  className="rounded-xl border border-slate-200 px-4 py-2.5 text-sm font-semibold text-slate-600 hover:bg-slate-50"
                 >
                   Cancel
                 </button>
@@ -808,11 +672,9 @@ export default function TeamsPage() {
                     mentors.length === 0 ||
                     students.length === 0
                   }
-                  className="rounded-xl bg-violet-600 px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-violet-700 disabled:cursor-not-allowed disabled:opacity-50"
+                  className="rounded-xl bg-violet-600 px-5 py-2.5 text-sm font-semibold text-white hover:bg-violet-700 disabled:cursor-not-allowed disabled:opacity-50"
                 >
-                  {creating
-                    ? "Creating..."
-                    : "Create Team"}
+                  {creating ? "Creating..." : "Create Team"}
                 </button>
               </div>
             </form>
@@ -823,35 +685,28 @@ export default function TeamsPage() {
   );
 }
 
-// ==========================================
-// STAT CARD
-// ==========================================
-
 function StatCard({
   title,
   value,
   icon,
-  iconClass,
+  color,
 }: {
   title: string;
   value: number;
-  icon: React.ReactNode;
-  iconClass: string;
+  icon: ReactNode;
+  color: string;
 }) {
   return (
     <div className="rounded-2xl border border-slate-200 bg-white p-5">
       <div className="flex items-center gap-3">
         <div
-          className={`flex h-11 w-11 items-center justify-center rounded-xl ${iconClass}`}
+          className={`flex h-11 w-11 items-center justify-center rounded-xl ${color}`}
         >
           {icon}
         </div>
 
         <div>
-          <p className="text-sm text-slate-500">
-            {title}
-          </p>
-
+          <p className="text-sm text-slate-500">{title}</p>
           <p className="text-2xl font-bold text-slate-900">
             {value}
           </p>
