@@ -1,6 +1,6 @@
+
 import NextAuth, { NextAuthOptions } from "next-auth";
 import CredentialsProvider from "next-auth/providers/credentials";
-
 import bcrypt from "bcryptjs";
 
 import { connectDB } from "@/lib/mongodb";
@@ -29,12 +29,19 @@ export const authOptions: NextAuthOptions = {
 
         await connectDB();
 
-        const user = await User.findOne({
-          email: String(credentials.email).toLowerCase(),
-        }).lean();
+        const email = String(credentials.email).trim().toLowerCase();
+
+        const user = await User.findOne({ email }).lean();
 
         if (!user) {
           return null;
+        }
+
+        // Block suspended users from logging in.
+        if (user.isSuspended === true) {
+          throw new Error(
+            "Your account has been suspended. Please contact the administrator."
+          );
         }
 
         const passwordMatch = await bcrypt.compare(
@@ -51,6 +58,7 @@ export const authOptions: NextAuthOptions = {
           name: user.name,
           email: user.email,
           role: user.role,
+          isSuspended: user.isSuspended === true,
         };
       },
     }),
@@ -65,6 +73,7 @@ export const authOptions: NextAuthOptions = {
       if (user) {
         token.id = user.id;
         token.role = user.role;
+        token.isSuspended = user.isSuspended === true;
       }
 
       return token;
@@ -72,14 +81,14 @@ export const authOptions: NextAuthOptions = {
 
     async session({ session, token }) {
       if (session.user) {
-        session.user.id = String(
-          token.id || token.sub || ""
-        );
+        session.user.id = String(token.id || token.sub || "");
 
         session.user.role =
           typeof token.role === "string"
             ? token.role
             : "STUDENT";
+
+        session.user.isSuspended = token.isSuspended === true;
       }
 
       return session;
