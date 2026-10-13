@@ -146,6 +146,7 @@ aiclubportal/
 │   │   ├── admin/
 │   │   │   ├── learning/
 │   │   │   ├── members/
+            ├── mentors/
 │   │   │   ├── projects/
 │   │   │   ├── settings/
 │   │   │   ├── tasks/
